@@ -1,0 +1,7 @@
+fastapi
+uvicorn
+langchain
+openai
+chromadb
+pandas
+pdfplumber
