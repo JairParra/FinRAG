@@ -1,2 +1,3 @@
-# FinReportRAG
-A RAG system for Financial Reports
+# FnReport RAG
+
+A RAG-powered agent for financial reports.
