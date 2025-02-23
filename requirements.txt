@@ -1,7 +1,7 @@
-fastapi
-uvicorn
-langchain
 openai
+langchain_community
+tiktoken
+langchain-openai
+langchainhub
 chromadb
-pandas
-pdfplumber
+langchain
