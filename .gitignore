@@ -176,3 +176,8 @@ cython_debug/
 
 # Custom 
 data/
+
+# SQLAlchemy
+*.db
+*.sqlite
+*.sqlite3

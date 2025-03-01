@@ -10,6 +10,25 @@
 
 ---
 
+## TODO 
+
+### Priority 
+
+1. Implement FastAPI `models`, `routes` 
+1. Figure out how to implement persistence in vector store
+
+### Secondary 
+
+1. Review Chunking techniques [Indexing] -> refer to rag from scratch 12-14
+
+--- 
+
+## Front-End 
+
+See https://github.com/alojony/FinReportRAG-FrontendGUI
+
+---
+
 ## ✨ **Key Features**
 🔹 **📄 Intelligent Document Parsing**: Extracts structured data from complex financial statements (PDFs).  
 🔹 **🔍 RAG-powered Query System**: Uses a vector database for accurate financial Q&A.  
