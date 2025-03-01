@@ -57,6 +57,9 @@ def load_full_pdf_splits(data_dir: str,
             try:
                 splits = load_and_split_pdf(pdf_path, chunk_size, chunk_overlap)
                 splits_dict[pdf_path] = splits
+
+                ## NOTE: At this point, can save PDFs to database or other storage
+
             except Exception as e:
                 print(f"Error processing {pdf_path}: {e}")
                 

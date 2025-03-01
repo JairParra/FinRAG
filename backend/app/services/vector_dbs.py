@@ -14,3 +14,4 @@ def build_vector_store(documents: list) -> any:
     embeddings = OpenAIEmbeddings()
     vectorstore = Chroma.from_documents(documents=documents, embedding=embeddings)
     return vectorstore.as_retriever()
+
