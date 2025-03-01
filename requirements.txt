@@ -5,3 +5,12 @@ langchain-openai
 langchainhub
 chromadb
 langchain
+fastapi
+uvicorn
+sqlalchemy
+psycopg2
+sentence-transformers
+faiss-cpu
+pydantic
+python-dotenv
+requests
