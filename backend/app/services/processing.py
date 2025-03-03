@@ -56,7 +56,7 @@ def load_full_pdf_splits(data_dir: str,
             pdf_path = os.path.join(data_dir, file)
             try:
                 splits = load_and_split_pdf(pdf_path, chunk_size, chunk_overlap)
-                splits_dict[pdf_path] = splits
+                splits_dict[file] = splits
 
                 ## NOTE: At this point, can save PDFs to database or other storage
 
