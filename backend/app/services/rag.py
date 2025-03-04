@@ -5,13 +5,11 @@ import bs4
 from operator import itemgetter
 
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_openai import ChatOpenAI
+from langchain_openai import OpenAIEmbeddings, ChatOpenAI
+from langchain_community.vectorstores import Chroma
 from langchain.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain.load import dumps, loads
-
-# Import the vector store functionality from the new module
-from .vector_dbs import build_vector_store
 
 # Assume credentials (LANGCHAIN_API_KEY, OPENAI_API_KEY, etc.) are set as global env variables
 
@@ -29,7 +27,8 @@ def generate_queries(question: str) -> list:
     )
     prompt_rag_fusion = ChatPromptTemplate.from_template(template)
     
-    # Chain: prompt -> ChatOpenAI -> StrOutputParser -> lambda to split output by newline
+    # Chain the prompt with the LLM and parser in a functional style
+    # This simulates: prompt -> ChatOpenAI -> StrOutputParser -> lambda split by newline
     chain = prompt_rag_fusion | ChatOpenAI(temperature=0) | StrOutputParser()
     queries_str = chain.invoke({"question": question})
     queries = queries_str.split("\n")
@@ -69,8 +68,9 @@ def retrieval_chain_rag_fusion(question: str, retriever: any) -> list:
     queries = generate_queries(question)
     all_results = []
     for q in queries:
-        # Retrieve documents relevant to each query (using .get_relevant_documents)
-        results = retriever.get_relevant_documents(q)
+        # Retrieve documents relevant to each query (assuming get_relevant_documents is implemented)
+        # results = retriever.get_relevant_documents(q)
+        results = retriever.invoke(q)
         all_results.append(results)
     
     fused_results = reciprocal_rank_fusion(all_results)
@@ -84,8 +84,8 @@ def final_rag_response(question: str, retriever: any) -> str:
       3. Generate the final answer using an OpenAI chat model.
     """
     fused_results = retrieval_chain_rag_fusion(question, retriever)
-    # Extract context from the fused documents (each document is expected to have a 'page_content' attribute)
-    context = "\n".join([doc.page_content for doc, _ in fused_results if hasattr(doc, "page_content")])
+    # Extract context from the fused documents (assumes each document has a 'page_content' attribute)
+    context = "\n".join([doc[0].page_content for doc in fused_results])
     
     template = (
         "Answer the following question based on this context:\n\n"
@@ -96,5 +96,6 @@ def final_rag_response(question: str, retriever: any) -> str:
     llm = ChatOpenAI(temperature=0)
     
     final_prompt = prompt.format(context=context, question=question)
-    answer = llm(final_prompt)
+    # answer = llm(final_prompt)
+    answer = llm.invoke(final_prompt)
     return answer
