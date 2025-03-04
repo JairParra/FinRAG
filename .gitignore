@@ -181,3 +181,9 @@ data/
 *.db
 *.sqlite
 *.sqlite3
+
+# API keys 
+keys.md
+
+# Vector Database 
+*chroma_db/
