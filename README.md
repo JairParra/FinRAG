@@ -6,12 +6,8 @@
 [![Docker](https://img.shields.io/badge/Dockerized-✔️-lightblue.svg?style=for-the-badge&logo=docker)](https://www.docker.com/)  
 
 ## 📌 **Project Overview**
-**FnReport RAG** is an **AI-powered financial analysis tool** that uses **Retrieval-Augmented Generation (RAG)** to **extract, process, and understand financial reports**. Built with **FastAPI, LangChain, OpenAI, and a vector database**, this tool enables **precise financial insights** from unstructured PDF reports.
 
----
-
-## TODO 
-
+Harnessing advanced **Retrieval-Augmented Generation (RAG) architectures**, **FnReport RAG** is an AI-native financial analytics system engineered with a modular microservices approach, integrating **FastAPI for high-throughput API orchestration, LangChain for dynamic LLM-driven reasoning, OpenAI’s transformer-based models for contextual comprehension, and a high-dimensional vector database for optimized semantic retrieval**. The system is developed within a **fully Agile SDLC**, leveraging **Kanban-driven workflow automation, sprint-based iterative refinement, and CI/CD pipelines with containerized deployments** to ensure continuous model fine-tuning, latency minimization, and scalable inference. By synthesizing complex, unstructured financial disclosures into **high-fidelity, domain-aware insights**, this architecture enables real-time extraction, token-level precision processing, and multi-modal financial intelligence at scale.
 
 --- 
 
