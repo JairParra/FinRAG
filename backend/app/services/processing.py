@@ -1,12 +1,13 @@
 ########################################################################################
 # Part 0: Imports
+
 import os
 from tqdm import tqdm
 #from langchain.document_loaders import PyPDFLoader
 from langchain_community.document_loaders import PyPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-import os
 from backend.app.config import OPENAI_API_KEY, LANGCHAIN_API_KEY
+
 
 # Ensure API keys are set before using LangChain services
 os.environ["OPENAI_API_KEY"] = OPENAI_API_KEY

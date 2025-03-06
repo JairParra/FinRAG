@@ -12,14 +12,6 @@
 
 ## TODO 
 
-### Priority 
-
-1. Implement FastAPI `models`, `routes` 
-1. Figure out how to implement persistence in vector store
-
-### Secondary 
-
-1. Review Chunking techniques [Indexing] -> refer to rag from scratch 12-14
 
 --- 
 
