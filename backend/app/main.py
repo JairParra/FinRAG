@@ -1,16 +1,25 @@
 from fastapi import FastAPI
-from endpoints import endpoints
-import db.database as db
+from backend.app.endpoints import document
+from endpoints import embeddings, queries, responses
 
-app = FastAPI(title="FnReport RAG API", version="1.0")
+app = FastAPI(title="FinReport RAG API", version="1.0")
 
-# Include routes from the endpoints module
-app.include_router(endpoints.router)
+# Include routes
+app.include_router(document.router)
+app.include_router(embeddings.router)
+app.include_router(queries.router)
+app.include_router(responses.router)
 
-# Initialize database tables
-db.Base.metadata.create_all(bind=db.engine)
+# Initialize DB tables
+@app.on_event("startup")
+def init_db():
+    from db.database import Base, engine
+    Base.metadata.create_all(bind=engine)
 
 @app.get("/")
 def home():
-    """Home endpoint to verify the API is running."""
-    return {"message": "FnReport RAG API"}
+    return {"message": "FinReport RAG API is running"}
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)

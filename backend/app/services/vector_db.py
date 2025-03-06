@@ -4,6 +4,7 @@ import os
 import numpy as np
 from langchain_openai import OpenAIEmbeddings
 from langchain_chroma import Chroma
+from backend.app.config import CHROMA_DB_PATH
 # from langchain_community.vectorstores import Chroma # deprecated
 
 # Default persistent directory for the vector store
@@ -11,6 +12,12 @@ DEFAULT_PERSIST_DIR = "backend/app/db/chroma_db"
 
 ########################################################################################
 # Part 1: Vector Store Functions
+
+def get_vector_store():
+    embeddings = OpenAIEmbeddings()
+    return Chroma(persist_directory=CHROMA_DB_PATH, embedding_function=embeddings)
+
+
 
 def build_vector_store(documents: list, persist_dir: str = DEFAULT_PERSIST_DIR) -> any:
     """
@@ -36,7 +43,7 @@ def build_vector_store(documents: list, persist_dir: str = DEFAULT_PERSIST_DIR) 
         new_documents = [doc for doc in documents if doc.metadata.get("source") not in processed_sources]
         if new_documents:
             vectorstore.add_documents(new_documents)
-            vectorstore.persist()
+            #vectorstore.persist()
     else:
         # Create a new persistent vector store if none exists
         vectorstore = Chroma.from_documents(documents=documents, embedding=embeddings, persist_directory=persist_dir)
