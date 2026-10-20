@@ -1,5 +1,7 @@
 """
-Enhanced RAG service with intelligent retrieval and conversation memory
+Enhanced RAG service with intelligent retrieval, conversation memory,
+and robust prompt engineering optimized for high-end reasoning models
+(gpt-6-luna) while providing strict structural guidance for smaller models.
 """
 import os
 from typing import List, Tuple, Optional
@@ -9,7 +11,7 @@ from langchain_community.vectorstores import Chroma
 from langchain.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain.load import dumps, loads
-from backend.app.config import OPENAI_API_KEY
+from backend.app.config import OPENAI_API_KEY, get_chat_llm
 
 # Ensure API key is set
 os.environ["OPENAI_API_KEY"] = OPENAI_API_KEY if OPENAI_API_KEY else ""
@@ -20,7 +22,7 @@ os.environ["OPENAI_API_KEY"] = OPENAI_API_KEY if OPENAI_API_KEY else ""
 def should_use_rag(question: str, conversation_history: List[dict]) -> Tuple[bool, str]:
     """
     Determine if RAG retrieval is needed or if the question can be answered 
-    from conversation history or is a general query.
+    from conversation history or is a general conversational query.
     
     Returns:
         Tuple[bool, str]: (should_use_rag, reasoning)
@@ -31,17 +33,18 @@ def should_use_rag(question: str, conversation_history: List[dict]) -> Tuple[boo
         "profit", "loss", "income", "balance", "cash flow", "asset", 
         "liability", "metric", "quarter", "year", "fiscal", "company",
         "risk", "growth", "investment", "dividend", "shareholder", "debt",
-        "equity", "ratio", "margin", "expense", "cost", "sales"
+        "equity", "ratio", "margin", "expense", "cost", "sales", "ebitda",
+        "guidance", "table", "data", "numbers", "statistics"
     ]
     
     # Keywords that indicate conversational/follow-up queries
     conversational_keywords = [
         "what do you think", "can you explain", "tell me more", 
         "what about", "how about", "summarize", "clarify",
-        "you mentioned", "you said"
+        "you mentioned", "you said", "thank you", "thanks", "hello", "hi"
     ]
     
-    question_lower = question.lower()
+    question_lower = question.lower().strip()
     
     # Check for document-related keywords
     has_document_keywords = any(keyword in question_lower for keyword in document_keywords)
@@ -65,7 +68,7 @@ def should_use_rag(question: str, conversation_history: List[dict]) -> Tuple[boo
     if is_short_question and has_recent_context:
         return False, "Short follow-up question using conversation history"
     
-    # Default to RAG for ambiguous cases
+    # Default to RAG for safety and comprehensiveness
     return True, "Default to RAG for comprehensive answer"
 
 
@@ -74,65 +77,98 @@ def should_use_rag(question: str, conversation_history: List[dict]) -> Tuple[boo
 
 def generate_enhanced_queries(question: str, conversation_context: str = "") -> List[str]:
     """
-    Generate multiple optimized query variations for better retrieval.
-    Considers conversation context if available.
+    Generate multiple targeted query variations for better vector retrieval.
+    Deconstructs complex queries into keyword-rich financial sub-queries.
     """
     template = (
-        "You are an expert at generating search queries for financial document retrieval.\n"
+        "You are an expert financial information retrieval assistant.\n"
+        "Your task is to decompose the user's question into 3 diverse, precise search queries "
+        "designed to retrieve relevant sections from corporate financial reports, balance sheets, "
+        "income statements, and footnotes.\n\n"
         "{context}"
-        "Given the user's question, generate 3 diverse search queries that will help find relevant information.\n"
-        "Make queries specific, use financial terminology, and cover different aspects.\n\n"
+        "CRITICAL RULES:\n"
+        "1. Output EXACTLY 3 search queries, one per line.\n"
+        "2. Do NOT number the queries (no '1.', '2.', '3.').\n"
+        "3. Do NOT include bullet points, hyphens, quotation marks, or preamble.\n"
+        "4. Query 1: Focus on exact financial metrics, line items, and specific numbers.\n"
+        "5. Query 2: Focus on contextual commentary, executive discussion, or trends.\n"
+        "6. Query 3: Focus on broader fiscal year, comparison, or operational factors.\n\n"
         "User question: {question}\n\n"
-        "Generate 3 specific search queries (one per line):"
+        "Search queries:"
     )
     
     prompt = ChatPromptTemplate.from_template(template)
-    llm = ChatOpenAI(temperature=0, model="gpt-5.1")
+    llm = get_chat_llm(model="gpt-6-luna", reasoning_effort="medium")
     chain = prompt | llm | StrOutputParser()
     
-    queries_str = chain.invoke({
-        "question": question,
-        "context": f"Previous context: {conversation_context}\n\n" if conversation_context else ""
-    })
-    queries = [q.strip() for q in queries_str.split("\n") if q.strip()]
-    
-    # Always include the original question
-    if question not in queries:
-        queries.insert(0, question)
-    
-    return queries[:3]  # Limit to 3 queries for faster performance
+    try:
+        queries_str = chain.invoke({
+            "question": question,
+            "context": f"Prior Conversation Context:\n{conversation_context}\n\n" if conversation_context else ""
+        })
+        
+        # Clean up output lines
+        raw_lines = [q.strip() for q in queries_str.split("\n") if q.strip()]
+        clean_queries = []
+        for line in raw_lines:
+            # Strip numbering like '1.', '1)', '-', '*'
+            cleaned = line.lstrip("0123456789.-*•) ").strip("\"' ")
+            if cleaned:
+                clean_queries.append(cleaned)
+        
+        # Always prioritize original question at position 0
+        if question not in clean_queries:
+            clean_queries.insert(0, question)
+        
+        return clean_queries[:3]
+    except Exception as e:
+        print(f"Error in generate_enhanced_queries: {e}")
+        return [question]
 
 
 def generate_suggested_prompts(context_text: str = "") -> List[str]:
     """
-    Generate 3-4 short, relevant suggested questions based on document content.
+    Generate 3 short, relevant suggested questions based on uploaded document content.
     """
     template = (
-        "You are a helpful financial analyst assistant.\n"
-        "Based on the following summary or content from financial documents, generate 3 short, specific, and interesting questions a user might ask.\n"
-        "The questions should be diverse (e.g., one about metrics, one about trends, one about risks).\n"
-        "Keep them under 10 words each.\n\n"
-        "Document Context: {context}\n\n"
-        "Generate 3 questions (one per line):"
+        "You are a professional financial analyst.\n"
+        "Review the excerpt from the financial document and suggest 3 insightful, concise questions "
+        "that an investor or financial analyst would ask about this specific data.\n\n"
+        "RULES:\n"
+        "1. Output EXACTLY 3 questions, one per line.\n"
+        "2. Keep each question concise (under 12 words).\n"
+        "3. Do NOT include numbering, prefixes, or conversational filler.\n"
+        "4. Focus on key numbers, revenue/profit trends, and financial risks mentioned in the text.\n\n"
+        "Document Context:\n{context}\n\n"
+        "Suggested Questions:"
     )
     
     prompt = ChatPromptTemplate.from_template(template)
-    llm = ChatOpenAI(temperature=0.7, model="gpt-5.1")
+    llm = get_chat_llm(model="gpt-6-luna", reasoning_effort="medium")
     chain = prompt | llm | StrOutputParser()
     
     try:
-        # If context is too long, truncate it
         safe_context = context_text[:4000] if context_text else "Financial reports and statements."
-        
         response = chain.invoke({"context": safe_context})
-        questions = [q.strip() for q in response.split("\n") if q.strip()]
-        return questions[:3]
+        raw_questions = [q.strip() for q in response.split("\n") if q.strip()]
+        
+        clean_questions = []
+        for q in raw_questions:
+            cleaned = q.lstrip("0123456789.-*•) ").strip("\"' ")
+            if cleaned:
+                clean_questions.append(cleaned)
+                
+        return clean_questions[:3] if len(clean_questions) >= 3 else [
+            "What are the key financial highlights and revenue figures?",
+            "How did profit margins and operating income perform year-over-year?",
+            "What material risks and outlook are discussed in the report?"
+        ]
     except Exception as e:
         print(f"Error generating suggested prompts: {e}")
         return [
-            "What are the key financial metrics highlighted in the 2023 report?",
-            "How has the company's revenue trended over the past quarter?",
-            "What risks are mentioned in the financial statements?"
+            "What are the key financial highlights and revenue figures?",
+            "How did profit margins and operating income perform year-over-year?",
+            "What material risks and outlook are discussed in the report?"
         ]
 
 
@@ -167,7 +203,7 @@ def generate_rag_response(
     question: str,
     retriever,
     conversation_history: List[dict] = None
-) -> str:
+) -> Tuple[str, List[dict]]:
     """
     Generate response using RAG with conversation history awareness.
     """
@@ -195,12 +231,12 @@ def generate_rag_response(
     
     # Fuse results
     if not all_results:
-        return "I couldn't retrieve relevant information from the documents. Please try rephrasing your question."
+        return "I could not retrieve relevant information from the uploaded documents. Please try rephrasing your question or uploading additional documents.", []
     
     fused_results = reciprocal_rank_fusion(all_results)
     
     # Extract context from top results
-    context_docs = fused_results[:4]  # Top 4 documents for faster processing
+    context_docs = fused_results[:5]  # Top 5 documents for comprehensive synthesis
     context = "\n\n".join([
         f"[Source: {doc[0].metadata.get('source', 'Unknown')} - Page {doc[0].metadata.get('page', 'N/A')}]\n{doc[0].page_content}"
         for doc in context_docs
@@ -209,51 +245,56 @@ def generate_rag_response(
     # Check if this is a visualization proposal request
     is_viz_proposal = any(keyword in question.lower() 
                           for keyword in ['propose visualization', 'suggest visualization', 
-                                        'recommend visualization', 'what visualizations',
-                                        'propose useful', 'suggest graphs', 'recommend charts'])
+                                         'recommend visualization', 'what visualizations',
+                                         'propose useful', 'suggest graphs', 'recommend charts',
+                                         'plot data', 'chart this'])
     
-    # Build enhanced prompt with conditional instructions
     if is_viz_proposal:
-        template = """You are a professional financial analyst AI assistant. The user is asking you to propose visualizations based on the financial documents.
+        template = """You are a senior financial analyst and data visualization architect.
+The user is requesting concrete visualization proposals based on the provided financial documents.
 
-**IMPORTANT:** You must EXTRACT AND PROVIDE the actual data from the documents in a structured format. Do NOT just describe what charts to create - PROVIDE THE DATA!
+**CRITICAL MANDATE:**
+You MUST extract real, concrete numerical datasets from the context. Do NOT simply describe hypothetical charts—you MUST provide the exact data tables so the platform can automatically render interactive charts.
 
 **Conversation History:**
 {conversation_history}
 
-**Retrieved Financial Information:**
+**Retrieved Financial Context:**
 {context}
 
-**Current Question:** {question}
+**User Request:**
+{question}
 
-**CRITICAL INSTRUCTIONS FOR VISUALIZATION PROPOSALS:**
-1. EXTRACT all relevant numerical data from the documents
-2. STRUCTURE the data in clear tables or lists with:
-   - Column names (e.g., Year, Revenue, EBITDA, etc.)
-   - Actual values with units (e.g., ₹71,777 million)
-3. For EACH dataset, provide:
-   - Dataset name and description
-   - The actual data points in tabular format
-   - Why this data would make a good visualization
-4. Include AT LEAST 2-3 concrete datasets with real numbers
-5. Format data like this:
+**REQUIRED OUTPUT STRUCTURE:**
+For each proposed visualization (provide 2 to 3 distinct datasets):
 
-**Dataset 1: Revenue Trend (2019-2023)**
-Year | Revenue (₹ millions)
-2019 | 62,000
-2020 | 62,621
-2021 | 71,777
-2022 | 85,336
-2023 | 98,450
+### 1. Dataset Title & Objective
+Briefly describe the business insight shown (e.g., "5-Year Revenue & Operating Profit Trajectory").
 
-- This shows clear growth trend
-- Best visualized as: Line chart
+### 2. Clean Markdown Table
+Provide a strict, cleanly formatted Markdown Table.
+- Put metric units in column headers (e.g., `Revenue ($ Millions)`, `Operating Margin (%)`).
+- Keep cell values purely numerical or standard percentages (e.g., `12450.5` or `18.2%`).
+- Do NOT mix text sentences into numeric cells.
 
-DO NOT say "you could visualize" or "I recommend" - PROVIDE THE ACTUAL DATA so the system can create the visualization automatically!
+Example format:
+| Year | Revenue ($M) | Operating Income ($M) | Operating Margin (%) |
+|:-----|:-------------|:----------------------|:---------------------|
+| 2021 | 52400        | 11200                 | 21.4%                |
+| 2022 | 58900        | 13100                 | 22.2%                |
+| 2023 | 64200        | 14800                 | 23.1%                |
+
+### 3. Recommended Chart Type & Rationale
+Specify: Best visual format (e.g., Multi-bar chart, Line chart, Waterfall chart) and key takeaway.
+
+### 4. Source Citation
+Explicitly cite the source document and page number.
 
 **Answer:**"""
     else:
-        template = """You are a professional financial analyst AI assistant. Answer the user's question based on the provided financial documents.
+        template = """You are an elite financial analyst AI assistant specializing in corporate financial statements, earnings reports, and SEC filings.
+
+Answer the user's question accurately, rigorously, and objectively based on the retrieved financial documents.
 
 **Conversation History:**
 {conversation_history}
@@ -261,33 +302,42 @@ DO NOT say "you could visualize" or "I recommend" - PROVIDE THE ACTUAL DATA so t
 **Retrieved Financial Information:**
 {context}
 
-**Current Question:** {question}
+**Current Question:**
+{question}
 
-**Instructions:**
-- **LATEX FORMATTING**: Use `$$` for block equations and `$` for inline equations. DO NOT use `\\[ ... \\]` or `\\( ... \\)`.
-- **DATA PRESENTATION**: ALWAYS present numerical data in clear **Markdown Tables** with proper headers and alignment.
-- **VISUALIZATIONS**: The system will AUTOMATICALLY generate interactive charts from your tables. DO NOT create ASCII art graphs or provide Python/Excel code.
-- **TABLE FORMAT**: When presenting data over time or comparisons, use this format:
-  ```
-  Year | Metric
-  2020 | 12.5
-  2021 | 15.3
-  ```
-- **COMPLEX QUESTIONS**: If the user asks for calculations, show your work step-by-step using the data found.
-- **CITATIONS**: Cite specific metrics with their source and page number (e.g., "Revenue was $10M (Annual Report 2021, p. 5)").
-- **ACCURACY**: If multiple documents are relevant, synthesize information comprehensively. If information is missing, state it clearly.
-- **FORMATTING**: Use professional financial terminology and format numbers clearly (e.g., $1.2M, 15.3%).
-- **NO CODE**: Never provide code snippets (Python, R, Excel formulas) unless explicitly requested. Just provide the data in tables.
+---
+
+### CORE OPERATING GUIDELINES (Follow strictly):
+
+1. **GROUNDING & FAITHFULNESS**:
+   - Rely strictly on the facts, metrics, and commentary present in the retrieved context.
+   - NEVER invent or extrapolate unstated numbers. If a specific figure, quarter, or metric is missing, explicitly state: *"This metric is not specified in the provided document excerpts."*
+
+2. **STRUCTURED PRESENTATION**:
+   - **Executive Summary**: Begin with a direct, high-level summary (2-3 sentences) answering the core question.
+   - **Key Metrics & Data Tables**: ALWAYS present numerical comparisons, financial statements, and trends in clean **Markdown Tables** with units in column headers (e.g., `| Fiscal Year | Net Sales ($M) | YoY Growth (%) |`).
+   - **Financial Analysis & Commentary**: Provide analytical insights into the drivers behind the numbers (e.g., volume vs. price, margin expansion/contraction, foreign exchange impact).
+   - **Risks & Caveats**: Highlight any relevant headwinds, caveats, or risks noted in the text.
+
+3. **MATHEMATICAL & LATEX FORMATTING**:
+   - Use `$$` for block mathematical equations and `$` for inline mathematical expressions.
+   - Do NOT use `\\[ ... \\]` or `\\( ... \\)`.
+   - When calculating variances, CAGR, or margins, show the formula and step-by-step substitution clearly.
+
+4. **AUTOMATED VISUALIZATION COMPATIBILITY**:
+   - The UI automatically extracts markdown tables to create interactive charts. Ensure your tables are clean, properly aligned, and use standard numeric formats.
+   - Do NOT produce ASCII drawings or code blocks containing Python/Matplotlib/Excel scripts unless specifically requested.
+
+5. **PRECISE CITATIONS**:
+   - Cite source documents and page numbers for all key statistics (e.g., *[Annual Report 2023, p. 24]*).
 
 **Answer:**"""
     
     prompt = ChatPromptTemplate.from_template(template)
-    llm = ChatOpenAI(temperature=0, model="gpt-5.1")
+    llm = get_chat_llm(model="gpt-6-luna", reasoning_effort="medium")
     
-    # Format conversation history
     conv_history_text = conv_context if conv_context else "No previous conversation."
     
-    # Generate response
     formatted_prompt = prompt.format(
         conversation_history=conv_history_text,
         context=context,
@@ -321,37 +371,37 @@ def generate_conversational_response(
     """
     Generate response using only conversation history (no document retrieval).
     """
-    # Build conversation context
     conv_context = "\n".join([
         f"User: {msg['user']}\nAssistant: {msg['assistant']}"
         for msg in conversation_history[-5:]  # Last 5 exchanges
     ])
     
-    template = """You are a helpful financial analyst AI assistant. Continue the conversation naturally.
+    template = """You are an expert financial analyst and advisory assistant.
+Continue the conversation naturally, professionally, and helpfully.
 
 **Conversation History:**
 {conversation_history}
 
-**Current Question:** {question}
+**Current Question:**
+{question}
 
-**Instructions:**
-- Answer based on the conversation context
-- Be concise and relevant
-- If you need document information to answer properly, politely suggest the user ask a document-specific question
-- Maintain professional tone
+**Guidelines:**
+- Answer based on the existing conversation flow and general financial domain knowledge.
+- Be clear, structured, and insightful.
+- If the question requires specific company data, figures, or verification that is not yet uploaded, politely invite the user to upload the relevant financial document or ask a document-specific query.
+- Use professional financial terminology and maintain an objective, authoritative tone.
 
 **Answer:**"""
     
     prompt = ChatPromptTemplate.from_template(template)
-    llm = ChatOpenAI(temperature=0.3, model="gpt-5.1")
+    llm = get_chat_llm(model="gpt-6-luna", reasoning_effort="medium")
     
     formatted_prompt = prompt.format(
-        conversation_history=conv_context,
+        conversation_history=conv_context if conv_context else "No previous conversation.",
         question=question
     )
     
     response = llm.invoke(formatted_prompt)
-    
     return response.content if hasattr(response, 'content') else str(response)
 
 

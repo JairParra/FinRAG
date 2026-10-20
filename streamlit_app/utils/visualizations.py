@@ -9,6 +9,7 @@ import re
 from langchain_openai import ChatOpenAI
 from langchain.prompts import ChatPromptTemplate
 from streamlit_app.config.colors import CHART_COLORS
+from backend.app.config import get_chat_llm
 
 
 def extract_financial_tables(retriever, query: str) -> Optional[pd.DataFrame]:
@@ -42,7 +43,7 @@ def extract_financial_tables(retriever, query: str) -> Optional[pd.DataFrame]:
 **CSV Output:"""
     
     prompt = ChatPromptTemplate.from_template(template)
-    llm = ChatOpenAI(temperature=0, model="gpt-4o-2024-11-20")
+    llm = get_chat_llm(model="gpt-6-luna", reasoning_effort="medium")
     
     response = llm.invoke(prompt.format(context=context, query=query))
     response_text = response.content if hasattr(response, 'content') else str(response)
@@ -203,7 +204,7 @@ If a metric is not available, use "N/A"
 **Metrics:"""
     
     prompt = ChatPromptTemplate.from_template(template)
-    llm = ChatOpenAI(temperature=0, model="gpt-4o-2024-11-20")
+    llm = get_chat_llm(model="gpt-6-luna", reasoning_effort="medium")
     
     response = llm.invoke(prompt.format(context=context))
     response_text = response.content if hasattr(response, 'content') else str(response)
