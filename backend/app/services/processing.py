@@ -2,7 +2,7 @@
 # Part 0: Imports
 
 import os
-from tqdm import tqdm
+from concurrent.futures import ThreadPoolExecutor, as_completed
 #from langchain.document_loaders import PyPDFLoader
 from langchain_community.document_loaders import PyPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
@@ -22,8 +22,8 @@ def load_and_split_pdf(pdf_path: str, chunk_size: int = 300, chunk_overlap: int 
     
     Parameters:
       - pdf_path: Path to the PDF file.
-      - chunk_size: The maximum token length for each chunk.
-      - chunk_overlap: The number of overlapping tokens between chunks.
+      - chunk_size: The maximum token length for each chunk (default: 300).
+      - chunk_overlap: The number of overlapping tokens between chunks (default: 50).
       
     Returns:
       - List of document chunks (full splits).
@@ -32,7 +32,7 @@ def load_and_split_pdf(pdf_path: str, chunk_size: int = 300, chunk_overlap: int 
     loader = PyPDFLoader(pdf_path)
     documents = loader.load()
     
-    # Initialize the text splitter
+    # Initialize the text splitter with optimized settings
     text_splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
         chunk_size=chunk_size,
         chunk_overlap=chunk_overlap
@@ -42,32 +42,63 @@ def load_and_split_pdf(pdf_path: str, chunk_size: int = 300, chunk_overlap: int 
     splits = text_splitter.split_documents(documents)
     return splits
 
+
 def load_full_pdf_splits(data_dir: str, 
                          chunk_size: int = 300, 
                          chunk_overlap: int = 50, 
-                         verbose: int = 0) -> dict:
+                         verbose: int = 0,
+                         use_parallel: bool = True,
+                         max_workers: int = 4) -> dict:
     """
     Discover all PDF files in the given directory, load and split each PDF document,
     and return a dictionary mapping each PDF file path to its list of full document splits.
+    Uses parallel processing for faster performance.
     
     Parameters:
       - data_dir: Path to the directory containing PDF files.
       - chunk_size: The maximum token length for each chunk (default: 300).
       - chunk_overlap: The number of overlapping tokens between chunks (default: 50).
+      - use_parallel: Whether to use parallel processing (default: True).
+      - max_workers: Maximum number of parallel workers (default: 4).
       
     Returns:
       - Dictionary with keys as PDF file paths and values as lists of document chunks.
     """
+    # Find all PDF files
+    pdf_files = [f for f in os.listdir(data_dir) if f.lower().endswith(".pdf")]
+    
+    if not pdf_files:
+        return {}
+    
     splits_dict = {}
-    for file in os.listdir(data_dir):
-        if file.lower().endswith(".pdf"):
+    
+    if use_parallel and len(pdf_files) > 1:
+        # Parallel processing
+        def process_single_pdf(file):
+            pdf_path = os.path.join(data_dir, file)
+            try:
+                splits = load_and_split_pdf(pdf_path, chunk_size, chunk_overlap)
+                return (file, splits, None)
+            except Exception as e:
+                return (file, None, str(e))
+        
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = {executor.submit(process_single_pdf, file): file for file in pdf_files}
+            
+            # Process without tqdm to avoid Streamlit conflicts
+            for future in as_completed(futures):
+                file, splits, error = future.result()
+                if error:
+                    print(f"Error processing {file}: {error}")
+                else:
+                    splits_dict[file] = splits
+    else:
+        # Sequential processing
+        for file in pdf_files:
             pdf_path = os.path.join(data_dir, file)
             try:
                 splits = load_and_split_pdf(pdf_path, chunk_size, chunk_overlap)
                 splits_dict[file] = splits
-
-                ## NOTE: At this point, can save PDFs to database or other storage
-
             except Exception as e:
                 print(f"Error processing {pdf_path}: {e}")
                 

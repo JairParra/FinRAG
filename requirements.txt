@@ -1,16 +1,36 @@
+# Core Python + data stack
+python==3.10.*
+numpy
+pandas
+matplotlib
+seaborn
+scikit-learn
+
+# Streamlit & Visualization
+streamlit>=1.28.0
+plotly>=6.0.0
+altair>=5.1.0
+
+# Development tools (optional)
+jupyterlab
+notebook
+
+# NLP / PDF / embeddings
+pypdf
+nltk
+faiss-cpu
+
+# Kernels & environment utilities
+ipykernel
+python-dotenv
+
+# Everything else (originally pip-installed)
 openai
-langchain_community
-tiktoken
+langchain
+langchain-community
 langchain-openai
+langchain-chroma
 langchainhub
 chromadb
-langchain
-fastapi
-uvicorn
-sqlalchemy
-psycopg2
+tiktoken
 sentence-transformers
-faiss-cpu
-pydantic
-python-dotenv
-requests
