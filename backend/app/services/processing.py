@@ -5,7 +5,7 @@ import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 #from langchain.document_loaders import PyPDFLoader
 from langchain_community.document_loaders import PyPDFLoader
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from backend.app.config import OPENAI_API_KEY, LANGCHAIN_API_KEY
 
 
@@ -16,14 +16,15 @@ os.environ["LANGCHAIN_API_KEY"] = LANGCHAIN_API_KEY
 ########################################################################################
 # Part 1: PDF Processing Functions
 
-def load_and_split_pdf(pdf_path: str, chunk_size: int = 300, chunk_overlap: int = 50) -> list:
+def load_and_split_pdf(pdf_path: str, chunk_size: int = 550, chunk_overlap: int = 100) -> list:
     """
     Load a PDF document from the given path and split its content into smaller chunks.
+    Optimized for financial reports to keep tables and narrative commentary intact.
     
     Parameters:
       - pdf_path: Path to the PDF file.
-      - chunk_size: The maximum token length for each chunk (default: 300).
-      - chunk_overlap: The number of overlapping tokens between chunks (default: 50).
+      - chunk_size: The maximum token length for each chunk (default: 550).
+      - chunk_overlap: The number of overlapping tokens between chunks (default: 100).
       
     Returns:
       - List of document chunks (full splits).
@@ -32,10 +33,11 @@ def load_and_split_pdf(pdf_path: str, chunk_size: int = 300, chunk_overlap: int 
     loader = PyPDFLoader(pdf_path)
     documents = loader.load()
     
-    # Initialize the text splitter with optimized settings
+    # Initialize the text splitter with optimized settings for financial documents
     text_splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
         chunk_size=chunk_size,
-        chunk_overlap=chunk_overlap
+        chunk_overlap=chunk_overlap,
+        separators=["\n\n", "\n", ". ", " ", ""]
     )
     
     # Split the loaded document into smaller chunks
@@ -44,8 +46,8 @@ def load_and_split_pdf(pdf_path: str, chunk_size: int = 300, chunk_overlap: int 
 
 
 def load_full_pdf_splits(data_dir: str, 
-                         chunk_size: int = 300, 
-                         chunk_overlap: int = 50, 
+                         chunk_size: int = 550, 
+                         chunk_overlap: int = 100, 
                          verbose: int = 0,
                          use_parallel: bool = True,
                          max_workers: int = 4) -> dict:
@@ -56,8 +58,8 @@ def load_full_pdf_splits(data_dir: str,
     
     Parameters:
       - data_dir: Path to the directory containing PDF files.
-      - chunk_size: The maximum token length for each chunk (default: 300).
-      - chunk_overlap: The number of overlapping tokens between chunks (default: 50).
+      - chunk_size: The maximum token length for each chunk (default: 550).
+      - chunk_overlap: The number of overlapping tokens between chunks (default: 100).
       - use_parallel: Whether to use parallel processing (default: True).
       - max_workers: Maximum number of parallel workers (default: 4).
       

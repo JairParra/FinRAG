@@ -35,16 +35,23 @@ BORDER_SUBTLE = "#263238"           # Subtle borders
 BORDER_DEFAULT = "#37474F"          # Default borders
 BORDER_ACCENT = "#00B8D4"           # Accent borders
 
-# Chart Colors (for visualizations)
+# Executive Financial Palette (Bloomberg & Financial Times aesthetic)
+COLOR_REVENUE = "#3B82F6"       # Executive Sapphire Blue (Top-line revenue / volume)
+COLOR_EBITDA = "#F59E0B"        # Warm Amber Gold (EBITDA / Operating Income)
+COLOR_PROFIT = "#10B981"        # Emerald Green (Net income, positive expansion)
+COLOR_COST_DRAG = "#EF4444"     # Crimson / Rose (Cost drag, margin compression)
+COLOR_BASELINE = "#64748B"      # Slate Gray (Prior period, benchmark)
+
+# Chart Colors (Curated sequence for financial multi-series)
 CHART_COLORS = [
-    "#00D4FF",  # Cyan
-    "#4FC3F7",  # Sky
-    "#00B8D4",  # Teal
-    "#2196F3",  # Blue
-    "#64B5F6",  # Light blue
-    "#1976D2",  # Dark blue
-    "#0288D1",  # Blue variant
-    "#00ACC1",  # Cyan variant
+    "#3B82F6",  # Sapphire Blue
+    "#10B981",  # Emerald Green
+    "#F59E0B",  # Amber Gold
+    "#64748B",  # Slate Gray
+    "#8B5CF6",  # Modern Purple
+    "#06B6D4",  # Cyan Teal
+    "#EC4899",  # Rose Pink
+    "#14B8A6",  # Deep Teal
 ]
 
 # Gradient Definitions
@@ -114,8 +121,23 @@ def get_custom_css():
         .stButton > button {{
             border-radius: 8px;
             font-weight: 600;
-            padding: 0.5rem 2rem;
+            padding: 0.5rem 1rem;
             transition: all 0.3s ease;
+        }}
+        
+        /* Sidebar Buttons - compact padding and font to fit narrow columns */
+        [data-testid="stSidebar"] .stButton > button {{
+            padding: 0.4rem 0.5rem !important;
+            min-height: 2.2rem;
+            width: 100%;
+        }}
+        
+        [data-testid="stSidebar"] .stButton > button p {{
+            font-size: 0.85rem !important;
+            white-space: nowrap !important;
+            overflow: visible !important;
+            text-overflow: clip !important;
+            margin: 0 !important;
         }}
         
         /* Primary Button */

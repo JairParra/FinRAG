@@ -4,12 +4,12 @@ import os
 import bs4
 from operator import itemgetter
 
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_openai import OpenAIEmbeddings, ChatOpenAI
 from langchain_community.vectorstores import Chroma
-from langchain.prompts import ChatPromptTemplate
+from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
-from langchain.load import dumps, loads
+from langchain_core.load import dumps, loads
 from backend.app.config import get_chat_llm
 
 # Assume credentials (LANGCHAIN_API_KEY, OPENAI_API_KEY, etc.) are set as global env variables
