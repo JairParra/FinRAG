@@ -388,11 +388,11 @@ pytest backend/tests/ -v --tb=short --log-cli-level=INFO
 This project is licensed under the **Creative Commons Attribution-NonCommercial 4.0 International License (CC BY-NC 4.0)**.
 
 ```
-Copyright (c) 2026 Jair Parra. All rights reserved.
+Copyright (c) 2026 Hair Parra. All rights reserved.
 ```
 
 ### Key Terms:
-- **Attribution**: You must give appropriate credit to **Jair Parra / FinRAG**, provide a link to the license, and indicate if changes were made.
+- **Attribution**: You must give appropriate credit to **Hair Parra / FinRAG**, provide a link to the license, and indicate if changes were made.
 - **Non-Commercial**: You may **not** use the material, code, architectures, or prompt workflows for commercial purposes or monetized services.
 - **Sharing & Adaptations**: You may freely read, study, fork, and adapt the repository for personal, educational, research, and non-commercial open-source exploration.
 - For commercial licensing or enterprise inquiries, please contact the author directly.
@@ -403,7 +403,7 @@ See the full [LICENSE](file:///c:/Users/hair-/OneDrive/Desktop_remote/CODE/RAG_V
 
 ## 👨‍💻 **Author & Acknowledgments**
 
-**Jair Parra**  
+**Hair Parra**  
 - GitHub: [@JairParra](https://github.com/JairParra)
 
 *Contributions, feedback, and feature suggestions are welcome! If you find this project valuable, please give it a ⭐ on GitHub.*
