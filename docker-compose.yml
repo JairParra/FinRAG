@@ -20,11 +20,19 @@ services:
       # Persist uploaded documents
       - uploads_data:/app/temp_uploads
     env_file:
-      - .env
+      - path: .env
+        required: false
     environment:
-      # LangChain Configuration (override .env defaults here if needed)
+      # OpenAI Configuration
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-6-luna}
+      - REASONING_EFFORT=${REASONING_EFFORT:-medium}
+      # LangChain & LangSmith Tracing
+      - LANGCHAIN_API_KEY=${LANGCHAIN_API_KEY:-}
       - LANGCHAIN_TRACING_V2=${LANGCHAIN_TRACING_V2:-false}
       - LANGCHAIN_ENDPOINT=${LANGCHAIN_ENDPOINT:-https://api.smith.langchain.com}
+      - LANGCHAIN_PROJECT=${LANGCHAIN_PROJECT:-FinReport-RAG}
+      # Database and Runtime Paths
       - CHROMA_DB_PATH=${CHROMA_DB_PATH:-backend/app/db/chroma_db}
       # Logging
       - DEBUG_MODE=${DEBUG_MODE:-false}

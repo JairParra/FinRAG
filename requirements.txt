@@ -1,36 +1,31 @@
-# Core Python + data stack
-python==3.10.*
-numpy
-pandas
-matplotlib
-seaborn
-scikit-learn
+# ==========================================
+# FinReport RAG - Dependencies
+# Modernized for Python 3.14+
+# ==========================================
 
-# Streamlit & Visualization
-streamlit>=1.28.0
-plotly>=6.0.0
-altair>=5.1.0
+# Core Web App & Data Visualizations
+streamlit>=1.35.0
+plotly>=5.18.0
+pandas>=2.2.0
+numpy>=2.0.0
 
-# Development tools (optional)
-jupyterlab
-notebook
+# Document Parsing & HTML Extraction
+pypdf>=4.2.0
+beautifulsoup4>=4.12.0
+rank-bm25>=0.2.2
 
-# NLP / PDF / embeddings
-pypdf
-nltk
-faiss-cpu
+# Configuration & Utilities
+python-dotenv>=1.0.1
+pydantic>=2.7.0
+requests>=2.31.0
 
-# Kernels & environment utilities
-ipykernel
-python-dotenv
-
-# Everything else (originally pip-installed)
-openai
-langchain
-langchain-community
-langchain-openai
-langchain-chroma
-langchainhub
-chromadb
-tiktoken
-sentence-transformers
+# LLM & RAG Framework
+openai>=1.35.0
+langchain>=0.2.10
+langchain-core>=0.2.20
+langchain-community>=0.2.10
+langchain-openai>=0.1.15
+langchain-chroma>=0.1.2
+langchainhub>=0.1.20
+chromadb>=0.5.4
+tiktoken>=0.7.0

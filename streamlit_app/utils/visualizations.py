@@ -7,7 +7,7 @@ import plotly.graph_objects as go
 from typing import Dict, List, Optional
 import re
 from langchain_openai import ChatOpenAI
-from langchain.prompts import ChatPromptTemplate
+from langchain_core.prompts import ChatPromptTemplate
 from streamlit_app.config.colors import CHART_COLORS
 from backend.app.config import get_chat_llm
 

@@ -36,7 +36,7 @@ DEFAULT_REASONING_EFFORT = os.getenv("REASONING_EFFORT", "medium")
 def get_chat_llm(model: str = None, reasoning_effort: str = None, **kwargs):
     """
     Factory to return a ChatOpenAI instance configured with project defaults
-    (gpt-6-luna with medium reasoning effort).
+    (gpt-6-luna with medium reasoning effort, or model configured in OPENAI_MODEL).
     """
     from langchain_openai import ChatOpenAI
     selected_model = model or DEFAULT_MODEL
@@ -44,9 +44,11 @@ def get_chat_llm(model: str = None, reasoning_effort: str = None, **kwargs):
     
     llm_kwargs = {"model": selected_model, **kwargs}
     if selected_effort:
-        llm_kwargs["reasoning_effort"] = selected_effort
-        # Reasoning models do not accept custom temperature
-        llm_kwargs.pop("temperature", None)
+        # Non-reasoning models (gpt-4o, gpt-4o-mini, gpt-3.5-turbo, etc.) error if reasoning_effort is passed
+        non_reasoning = ["gpt-4o", "gpt-4-turbo", "gpt-3.5", "gpt-4-0"]
+        if not any(nr in selected_model.lower() for nr in non_reasoning):
+            llm_kwargs["reasoning_effort"] = selected_effort
+            llm_kwargs.pop("temperature", None)
     return ChatOpenAI(**llm_kwargs)
 
 # Ensure environment variables are set before using services

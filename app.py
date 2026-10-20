@@ -40,7 +40,6 @@ from streamlit_app.utils.timing import ProcessingTimer
 from streamlit_app.utils.auto_viz import generate_visualizations_from_response
 from backend.app.services.processing import load_and_split_pdf, load_full_pdf_splits
 from backend.app.services.vector_db import build_vector_store, extract_all_vectors
-from backend.app.services.vector_db import build_vector_store, extract_all_vectors
 from backend.app.services.enhanced_rag import chat_with_documents, generate_suggested_prompts
 from backend.app.utils.logging_config import log_info, log_error, log_debug, log_exception
 from streamlit_app.utils.visualizations import (
@@ -126,9 +125,9 @@ def render_sample_data_section():
             if not st.session_state.documents_loaded:
                 col1, col2 = st.columns(2)
                 with col1:
-                    load_clicked = st.button("🚀 Load Sample Data", type="primary", use_container_width=True)
+                    load_clicked = st.button("🚀 Load", type="primary", use_container_width=True, help="Load sample data")
                 with col2:
-                    reload_clicked = st.button("🔄 Reload Fresh", use_container_width=True)
+                    reload_clicked = st.button("🔄 Reload", use_container_width=True, help="Force reload and rebuild vector index")
                 
                 # Process outside columns so progress spans full width
                 if load_clicked:

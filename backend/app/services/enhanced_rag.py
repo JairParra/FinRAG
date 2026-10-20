@@ -5,12 +5,12 @@ and robust prompt engineering optimized for high-end reasoning models
 """
 import os
 from typing import List, Tuple, Optional
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_openai import OpenAIEmbeddings, ChatOpenAI
 from langchain_community.vectorstores import Chroma
-from langchain.prompts import ChatPromptTemplate
+from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
-from langchain.load import dumps, loads
+from langchain_core.load import dumps, loads
 from backend.app.config import OPENAI_API_KEY, get_chat_llm
 
 # Ensure API key is set
@@ -77,22 +77,23 @@ def should_use_rag(question: str, conversation_history: List[dict]) -> Tuple[boo
 
 def generate_enhanced_queries(question: str, conversation_context: str = "") -> List[str]:
     """
-    Generate multiple targeted query variations for better vector retrieval.
-    Deconstructs complex queries into keyword-rich financial sub-queries.
+    Generate targeted multi-query variations optimized for Hybrid (Dense + BM25) retrieval.
+    Deconstructs analytical and causal financial questions into metric, driver, and context queries.
     """
     template = (
         "You are an expert financial information retrieval assistant.\n"
-        "Your task is to decompose the user's question into 3 diverse, precise search queries "
-        "designed to retrieve relevant sections from corporate financial reports, balance sheets, "
-        "income statements, and footnotes.\n\n"
+        "Your task is to decompose the user's question into 3 diverse, highly effective search queries "
+        "designed to retrieve relevant sections from corporate annual reports, MD&A discussions, "
+        "income statements, and footnote disclosures.\n\n"
         "{context}"
         "CRITICAL RULES:\n"
         "1. Output EXACTLY 3 search queries, one per line.\n"
         "2. Do NOT number the queries (no '1.', '2.', '3.').\n"
         "3. Do NOT include bullet points, hyphens, quotation marks, or preamble.\n"
-        "4. Query 1: Focus on exact financial metrics, line items, and specific numbers.\n"
-        "5. Query 2: Focus on contextual commentary, executive discussion, or trends.\n"
-        "6. Query 3: Focus on broader fiscal year, comparison, or operational factors.\n\n"
+        "4. Query 1 (Metrics): Focus on the exact metrics, lines items, and specific numbers mentioned.\n"
+        "5. Query 2 (Causal Drivers): If the question asks 'why', 'how', or asks about margin changes, "
+        "search for explanatory causes: operating expenses, cost of sales, inflation, supply chain, or margin commentary.\n"
+        "6. Query 3 (Operational & Multi-Year): Focus on the fiscal year context, segment performance, or operational factors.\n\n"
         "User question: {question}\n\n"
         "Search queries:"
     )
@@ -111,7 +112,6 @@ def generate_enhanced_queries(question: str, conversation_context: str = "") -> 
         raw_lines = [q.strip() for q in queries_str.split("\n") if q.strip()]
         clean_queries = []
         for line in raw_lines:
-            # Strip numbering like '1.', '1)', '-', '*'
             cleaned = line.lstrip("0123456789.-*•) ").strip("\"' ")
             if cleaned:
                 clean_queries.append(cleaned)
@@ -173,11 +173,11 @@ def generate_suggested_prompts(context_text: str = "") -> List[str]:
 
 
 ########################################################################################
-# Part 3: Reciprocal Rank Fusion
+# Part 3: Reciprocal Rank Fusion & Semantic Re-ranking
 
 def reciprocal_rank_fusion(results: List[List], k: int = 60) -> List[Tuple]:
     """
-    Fuse multiple lists of ranked documents using Reciprocal Rank Fusion.
+    Fuse multiple lists of ranked documents (Dense + BM25) using Reciprocal Rank Fusion.
     """
     fused_scores = {}
     
@@ -196,6 +196,64 @@ def reciprocal_rank_fusion(results: List[List], k: int = 60) -> List[Tuple]:
     return reranked_results
 
 
+def semantic_rerank(candidates: List[Tuple], question: str, top_k: int = 5) -> List[Tuple]:
+    """
+    Cross-re-rank candidate documents using lexical overlap, causal narrative density,
+    and semantic relevance, outputting normalized scores [0.0 - 1.0].
+    """
+    import re
+    if not candidates:
+        return []
+
+    question_lower = question.lower()
+    is_causal_query = any(w in question_lower for w in [
+        "why", "cause", "reason", "driver", "lag", "slower", "faster", "margin", "gap", "explain", "how did"
+    ])
+
+    causal_markers = [
+        "due to", "because", "driven by", "result of", "impacted by", "reflecting",
+        "offset by", "higher costs", "cost increase", "inflation", "supply chain",
+        "operating expenses", "raw materials", "headwinds", "margin compression",
+        "foreign exchange", "mix shift", "pricing actions", "cost of sales"
+    ]
+
+    # Significant query terms
+    q_words = set(re.findall(r'[a-zA-Z0-9%.-]+', question_lower))
+    stopwords = {"why", "did", "the", "a", "an", "and", "or", "while", "in", "of", "to", "for", "with", "on", "at", "by", "from", "is", "was"}
+    key_q_words = {w for w in q_words if len(w) > 2 and w not in stopwords}
+
+    scored_candidates = []
+    for doc, rrf_score in candidates:
+        content_lower = doc.page_content.lower()
+
+        # 1. Base RRF contribution
+        base_score = min(rrf_score * 12.0, 0.40)
+
+        # 2. Key term overlap
+        matched_terms = sum(1 for w in key_q_words if w in content_lower)
+        overlap_score = min((matched_terms / max(len(key_q_words), 1)) * 0.35, 0.35)
+
+        # 3. Causal & Narrative bonus for explanatory questions
+        causal_score = 0.0
+        if is_causal_query:
+            matched_causal = sum(1 for m in causal_markers if m in content_lower)
+            if matched_causal > 0:
+                causal_score = min(0.12 + (matched_causal * 0.06), 0.25)
+            
+            # Penalize pure tabular lists that lack narrative context
+            num_tokens = len(re.findall(r'\b\d+[\d,.]*\b', content_lower))
+            word_tokens = len(re.findall(r'\b[a-zA-Z]+\b', content_lower))
+            if word_tokens > 0 and (num_tokens / word_tokens) > 1.2:
+                causal_score -= 0.10
+
+        total_score = max(min(base_score + overlap_score + causal_score, 0.98), 0.20)
+        scored_candidates.append((doc, total_score))
+
+    # Sort descending by re-ranked score
+    scored_candidates.sort(key=lambda x: x[1], reverse=True)
+    return scored_candidates[:top_k]
+
+
 ########################################################################################
 # Part 4: Enhanced RAG Response with Context
 
@@ -205,7 +263,7 @@ def generate_rag_response(
     conversation_history: List[dict] = None
 ) -> Tuple[str, List[dict]]:
     """
-    Generate response using RAG with conversation history awareness.
+    Generate response using Hybrid RAG (Dense + BM25), RRF, and Semantic Re-ranking.
     """
     # Build conversation context
     conv_context = ""
@@ -216,27 +274,36 @@ def generate_rag_response(
             for msg in recent_history
         ])
     
-    # Generate enhanced queries
+    # Generate enhanced queries (Metrics, Causal Drivers, Context)
     queries = generate_enhanced_queries(question, conv_context)
     
-    # Retrieve documents for each query
+    # Retrieve documents for each query (Hybrid: Dense + Sparse BM25)
     all_results = []
     for query in queries:
         try:
-            results = retriever.invoke(query)
-            all_results.append(results)
+            if hasattr(retriever, "get_hybrid_results"):
+                dense_res, bm25_res = retriever.get_hybrid_results(query, k=8)
+                if dense_res:
+                    all_results.append(dense_res)
+                if bm25_res:
+                    all_results.append(bm25_res)
+            else:
+                results = retriever.invoke(query)
+                if results:
+                    all_results.append(results)
         except Exception as e:
             print(f"Error retrieving for query '{query}': {e}")
             continue
     
-    # Fuse results
+    # Fuse results using Reciprocal Rank Fusion
     if not all_results:
         return "I could not retrieve relevant information from the uploaded documents. Please try rephrasing your question or uploading additional documents.", []
     
-    fused_results = reciprocal_rank_fusion(all_results)
+    fused_candidates = reciprocal_rank_fusion(all_results, k=60)
     
-    # Extract context from top results
-    context_docs = fused_results[:5]  # Top 5 documents for comprehensive synthesis
+    # Apply Semantic Re-ranking to prioritize causal & explanatory context
+    context_docs = semantic_rerank(fused_candidates[:15], question, top_k=5)
+    
     context = "\n\n".join([
         f"[Source: {doc[0].metadata.get('source', 'Unknown')} - Page {doc[0].metadata.get('page', 'N/A')}]\n{doc[0].page_content}"
         for doc in context_docs

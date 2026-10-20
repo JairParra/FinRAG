@@ -63,11 +63,12 @@ temp_uploads/
 !README.md
 docs/
 
-# ChromaDB (will be mounted as volume)
+# ChromaDB (persisted via volume, avoid baking local SQLite state)
 backend/app/db/chroma_db/*
+!backend/app/db/chroma_db/.gitkeep
 
-# Sample data (will be mounted as volume)
-sample_data/*
+# Sample data (uncomment if you wish to exclude sample PDFs from standalone image)
+# sample_data/*
 
 # Templates (not needed in production)
 rag_templates/
