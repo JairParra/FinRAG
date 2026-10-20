@@ -174,16 +174,36 @@ cython_debug/
 .pypirc
 .spyproject/
 
-# Custom 
-data/
+# Custom - Project Specific
+sample_data/          # Sample PDFs (not tracked)
+temp_uploads/         # Temporary upload directory
+*.old.md              # Backup files
 
-# SQLAlchemy
+# SQLAlchemy & Databases
 *.db
 *.sqlite
 *.sqlite3
 
-# API keys 
+# API keys & secrets
 keys.md
+.env
+!.env.example
 
-# Vector Database 
+# Vector Database
 *chroma_db/
+backend/app/db/chroma_db/
+
+# Streamlit
+.streamlit/
+
+# Logs directory (keep folder via .gitkeep)
+logs/
+!logs/.gitkeep
+
+# OS artifacts
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/

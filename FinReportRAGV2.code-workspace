@@ -1,0 +1,132 @@
+{
+	"folders": [
+		{
+			"path": ".",
+			"name": "FinReportRAG"
+		}
+	],
+	"settings": {
+		"jupyter.notebookFileRoot": "${workspaceFolder}",
+		"python.defaultInterpreterPath": "${workspaceFolder}/venv/Scripts/python",
+		"python.analysis.extraPaths": [
+			"${workspaceFolder}",
+			"${workspaceFolder}/backend",
+			"${workspaceFolder}/streamlit_app"
+		],
+		"python.autoComplete.extraPaths": [
+			"${workspaceFolder}",
+			"${workspaceFolder}/backend",
+			"${workspaceFolder}/streamlit_app"
+		],
+		"python.analysis.typeCheckingMode": "basic",
+		"makefile.configureOnOpen": false,
+		"files.exclude": {
+			"**/__pycache__": true,
+			"**/*.pyc": true,
+			"**/.pytest_cache": true,
+			"**/.mypy_cache": true,
+			"**/.ruff_cache": true
+		},
+		"files.watcherExclude": {
+			"**/backend/app/db/chroma_db/**": true,
+			"**/logs/**": true,
+			"**/temp_uploads/**": true,
+			"**/sample_data/**": true
+		},
+		"search.exclude": {
+			"**/backend/app/db/chroma_db": true,
+			"**/logs": true,
+			"**/sample_data": true,
+			"**/__pycache__": true
+		},
+		"editor.formatOnSave": true,
+		"editor.rulers": [88, 120],
+		"python.formatting.provider": "none",
+		"[python]": {
+			"editor.defaultFormatter": "ms-python.black-formatter",
+			"editor.formatOnSave": true
+		},
+		"terminal.integrated.env.windows": {
+			"PYTHONPATH": "${workspaceFolder}"
+		},
+		"terminal.integrated.env.linux": {
+			"PYTHONPATH": "${workspaceFolder}"
+		},
+		"terminal.integrated.env.osx": {
+			"PYTHONPATH": "${workspaceFolder}"
+		},
+		"postman.settings.dotenv-detection-notification-visibility": false,
+		"docker.defaultRegistryPath": "finreport-rag"
+	},
+	"extensions": {
+		"recommendations": [
+			"ms-python.python",
+			"ms-python.black-formatter",
+			"ms-python.pylint",
+			"ms-azuretools.vscode-docker",
+			"tamasfe.even-better-toml",
+			"redhat.vscode-yaml",
+			"donjayamanne.python-environment-manager"
+		]
+	},
+	"launch": {
+		"version": "0.2.0",
+		"configurations": [
+			{
+				"name": "Run Streamlit App",
+				"type": "python",
+				"request": "launch",
+				"module": "streamlit",
+				"args": ["run", "app.py"],
+				"env": {
+					"PYTHONPATH": "${workspaceFolder}"
+				},
+				"console": "integratedTerminal"
+			},
+			{
+				"name": "Run Tests",
+				"type": "python",
+				"request": "launch",
+				"module": "pytest",
+				"args": ["backend/tests/", "-v"],
+				"env": {
+					"PYTHONPATH": "${workspaceFolder}"
+				},
+				"console": "integratedTerminal"
+			}
+		]
+	},
+	"tasks": {
+		"version": "2.0.0",
+		"tasks": [
+			{
+				"label": "Run App",
+				"type": "shell",
+				"command": "streamlit run app.py",
+				"group": "build",
+				"presentation": {
+					"reveal": "always",
+					"panel": "new"
+				}
+			},
+			{
+				"label": "Docker Build",
+				"type": "shell",
+				"command": "docker build -t finreport-rag:latest .",
+				"group": "build"
+			},
+			{
+				"label": "Docker Up",
+				"type": "shell",
+				"command": "docker-compose up -d",
+				"group": "build"
+			},
+			{
+				"label": "Docker Down",
+				"type": "shell",
+				"command": "docker-compose down",
+				"group": "build"
+			}
+		]
+	}
+}

@@ -1,0 +1,43 @@
+name: finrag_env
+channels:
+  - conda-forge
+  - defaults
+
+dependencies:
+  # core Python + data stack
+  - python=3.10
+  - numpy
+  - pandas
+  - matplotlib
+  - seaborn
+  - scikit-learn
+
+  # Streamlit & visualization
+  - streamlit>=1.28.0
+  - jupyterlab
+  - notebook
+
+  # NLP / PDF / embeddings
+  - pypdf
+  - nltk
+  - faiss-cpu
+
+  # kernels & environment utilities
+  - ipykernel
+  - python-dotenv
+  - pip
+
+  # everything else (installed via pip)
+  - pip:
+    - openai
+    - langchain
+    - langchain-community
+    - langchain-openai
+    - langchain-chroma
+    - langchainhub
+    - chromadb
+    - tiktoken
+    - sentence-transformers
+    - plotly>=6.0.0
+    - pydantic
+    - requests

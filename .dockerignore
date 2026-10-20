@@ -1,0 +1,91 @@
+# .dockerignore for FinReport RAG
+# Exclude unnecessary files from Docker build context
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environments
+venv/
+env/
+ENV/
+finrag_env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# Environment variables (should be mounted, not copied)
+.env
+.env.local
+.env.*.local
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary files
+temp_uploads/
+*.tmp
+*.bak
+
+# Documentation
+*.md
+!README.md
+docs/
+
+# ChromaDB (will be mounted as volume)
+backend/app/db/chroma_db/*
+
+# Sample data (will be mounted as volume)
+sample_data/*
+
+# Templates (not needed in production)
+rag_templates/
+
+# Tests
+backend/tests/
+
+# Docker files
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+
+# Scripts (if not needed in container)
+scripts/
+
+# Infrastructure configs
+infrastructure/

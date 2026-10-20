@@ -29,7 +29,7 @@ def generate_queries(question: str) -> list:
     
     # Chain the prompt with the LLM and parser in a functional style
     # This simulates: prompt -> ChatOpenAI -> StrOutputParser -> lambda split by newline
-    chain = prompt_rag_fusion | ChatOpenAI(temperature=0) | StrOutputParser()
+    chain = prompt_rag_fusion | ChatOpenAI(temperature=0, model="gpt-4o-2024-11-20") | StrOutputParser()
     queries_str = chain.invoke({"question": question})
     queries = queries_str.split("\n")
     return queries
@@ -93,7 +93,7 @@ def final_rag_response(question: str, retriever: any) -> str:
         "Question: {question}\n"
     )
     prompt = ChatPromptTemplate.from_template(template)
-    llm = ChatOpenAI(temperature=0)
+    llm = ChatOpenAI(temperature=0, model="gpt-4o-2024-11-20")
     
     final_prompt = prompt.format(context=context, question=question)
     # answer = llm(final_prompt)
