@@ -17,7 +17,7 @@ from backend.app.utils.logging_config import log_info, log_error, log_debug, log
 def log_warning(message: str):
     """Simple warning logger"""
     log_info(f"WARNING: {message}")
-from backend.app.config import OPENAI_API_KEY
+from backend.app.config import OPENAI_API_KEY, get_chat_llm
 
 
 ########################################################################################
@@ -31,9 +31,9 @@ def extract_structured_data_with_llm(text: str, original_question: str = "") -> 
     try:
         log_debug("Starting LLM-powered data extraction...")
         
-        llm = ChatOpenAI(
-            model="gpt-4o-mini",  # Fast and cost-effective for extraction
-            temperature=0,
+        llm = get_chat_llm(
+            model="gpt-6-luna",
+            reasoning_effort="medium",
             api_key=OPENAI_API_KEY
         )
         

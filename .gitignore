@@ -175,9 +175,13 @@ cython_debug/
 .spyproject/
 
 # Custom - Project Specific
-sample_data/          # Sample PDFs (not tracked)
-temp_uploads/         # Temporary upload directory
-*.old.md              # Backup files
+# Sample PDFs
+sample_data/
+# Temporary upload directory
+temp_uploads/
+*.old.md
+# RAG strategy templates
+rag_templates/
 
 # SQLAlchemy & Databases
 *.db

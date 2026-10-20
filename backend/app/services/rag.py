@@ -10,6 +10,7 @@ from langchain_community.vectorstores import Chroma
 from langchain.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain.load import dumps, loads
+from backend.app.config import get_chat_llm
 
 # Assume credentials (LANGCHAIN_API_KEY, OPENAI_API_KEY, etc.) are set as global env variables
 
@@ -29,7 +30,7 @@ def generate_queries(question: str) -> list:
     
     # Chain the prompt with the LLM and parser in a functional style
     # This simulates: prompt -> ChatOpenAI -> StrOutputParser -> lambda split by newline
-    chain = prompt_rag_fusion | ChatOpenAI(temperature=0, model="gpt-4o-2024-11-20") | StrOutputParser()
+    chain = prompt_rag_fusion | get_chat_llm(model="gpt-6-luna", reasoning_effort="medium") | StrOutputParser()
     queries_str = chain.invoke({"question": question})
     queries = queries_str.split("\n")
     return queries
@@ -93,7 +94,7 @@ def final_rag_response(question: str, retriever: any) -> str:
         "Question: {question}\n"
     )
     prompt = ChatPromptTemplate.from_template(template)
-    llm = ChatOpenAI(temperature=0, model="gpt-4o-2024-11-20")
+    llm = get_chat_llm(model="gpt-6-luna", reasoning_effort="medium")
     
     final_prompt = prompt.format(context=context, question=question)
     # answer = llm(final_prompt)
