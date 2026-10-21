@@ -132,7 +132,7 @@ FinReportRAG/
 
 ## 🧠 **RAG Pipeline Architecture**
 
-![alt text](img/architecture.png)
+![alt text](img/RAG_architecture.jpg)
 
 ---
 
