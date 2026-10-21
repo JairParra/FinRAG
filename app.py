@@ -95,15 +95,19 @@ def render_upload_section():
     """Render PDF upload section"""
     st.subheader("Upload Financial Reports")
     
+    is_busy = st.session_state.get("is_processing", False)
+    
     uploaded_files = st.file_uploader(
         "Upload PDF files",
         type=["pdf"],
         accept_multiple_files=True,
-        help="Upload financial reports in PDF format"
+        help="Upload financial reports in PDF format",
+        disabled=is_busy
     )
     
     if uploaded_files:
-        if st.button("🚀 Process Documents", type="primary", use_container_width=True):
+        button_label = "⏳ Processing..." if is_busy else "🚀 Process Documents"
+        if st.button(button_label, type="primary", use_container_width=True, disabled=is_busy):
             process_uploaded_files(uploaded_files)
 
 
@@ -123,17 +127,20 @@ def render_sample_data_section():
                 st.text(f"• {pdf.name}")
             
             if not st.session_state.documents_loaded:
+                is_busy = st.session_state.get("is_processing", False)
                 col1, col2 = st.columns(2)
                 with col1:
-                    load_clicked = st.button("🚀 Load", type="primary", use_container_width=True, help="Load sample data")
+                    load_label = "⏳ Processing..." if is_busy else "🚀 Load"
+                    load_clicked = st.button(load_label, type="primary", use_container_width=True, disabled=is_busy, help="Load sample data")
                 with col2:
-                    reload_clicked = st.button("🔄 Reload", use_container_width=True, help="Force reload and rebuild vector index")
+                    reload_clicked = st.button("🔄 Reload", use_container_width=True, disabled=is_busy, help="Force reload and rebuild vector index")
                 
                 # Process outside columns so progress spans full width
-                if load_clicked:
-                    process_sample_data(str(sample_data_path), force_reload=False)
-                elif reload_clicked:
-                    process_sample_data(str(sample_data_path), force_reload=True)
+                if not is_busy:
+                    if load_clicked:
+                        process_sample_data(str(sample_data_path), force_reload=False)
+                    elif reload_clicked:
+                        process_sample_data(str(sample_data_path), force_reload=True)
         else:
             st.warning("No PDF files found in sample_data/")
     else:
@@ -141,7 +148,12 @@ def render_sample_data_section():
 
 
 def process_uploaded_files(uploaded_files):
-    """Process uploaded PDF files with parallel processing"""
+    """Process uploaded PDF files with parallel processing and live progress updates"""
+    if st.session_state.get("is_processing", False):
+        st.warning("⚠️ Processing is already in progress. Please wait for it to complete.")
+        return
+        
+    st.session_state.is_processing = True
     try:
         log_info(f"Starting to process {len(uploaded_files)} uploaded files")
         
@@ -150,14 +162,15 @@ def process_uploaded_files(uploaded_files):
         temp_dir.mkdir(exist_ok=True)
         
         # Create progress bar and timer
-        progress_bar = st.progress(0)
+        progress_bar = st.progress(0.0)
         status_text = st.empty()
         time_text = st.empty()
-        timer = ProcessingTimer(2)  # 2 steps: save + process, then vector store
+        timer = ProcessingTimer(len(uploaded_files) + 2)
         
         # Step 1: Save uploaded files
         timer.start_item()
         status_text.markdown("### 📥 Saving uploaded files...")
+        time_text.markdown("**⏱️ Elapsed:** 0s | **💾 Writing files to local storage...**")
         progress_bar.progress(0.1)
         
         # Save all files first
@@ -167,21 +180,29 @@ def process_uploaded_files(uploaded_files):
                 f.write(uploaded_file.getbuffer())
         
         timer.complete_item()
-        progress_bar.progress(0.3)
+        progress_bar.progress(0.2)
         
-        # Step 2: Process PDFs in parallel
+        # Step 2: Process PDFs in parallel with live per-file updates
         timer.start_item()
-        status_text.markdown(f"### ⚙️ Processing {len(uploaded_files)} PDFs (Grab a cup of coffee 🍵)...")
-        time_text.markdown(f"**⏱️ Elapsed:** {ProcessingTimer.format_time(timer.get_elapsed_time())} | **🔄 Processing in parallel...**")
+        status_text.markdown(f"### ⚙️ Processing {len(uploaded_files)} PDF(s) in parallel...")
+        time_text.markdown(f"**⏱️ Elapsed:** {ProcessingTimer.format_time(timer.get_elapsed_time())} | **🔄 Extracting pages & tables...**")
+        
+        def on_upload_pdf_progress(completed_count, total_count, file_name, chunks_count):
+            elapsed = ProcessingTimer.format_time(timer.get_elapsed_time())
+            pct = 0.2 + 0.45 * (completed_count / max(1, total_count))
+            progress_bar.progress(min(0.65, pct))
+            status_text.markdown(f"### ⚙️ Parsing Documents ({completed_count}/{total_count} files completed)...")
+            time_text.markdown(f"**⏱️ Elapsed:** {elapsed} | **📄 Processed:** `{file_name}` ({chunks_count} chunks)")
         
         pdf_splits_dict = load_full_pdf_splits(
             str(temp_dir),
             use_parallel=True,
-            max_workers=4
+            max_workers=4,
+            progress_callback=on_upload_pdf_progress
         )
         
         timer.complete_item()
-        progress_bar.progress(0.6)
+        progress_bar.progress(0.65)
         
         # Aggregate splits
         all_splits = []
@@ -201,9 +222,9 @@ def process_uploaded_files(uploaded_files):
         # Step 3: Build vector store
         timer.start_item()
         log_info(f"Building vector store with {len(all_splits)} chunks")
-        status_text.markdown(f"### 🔍 Building vector database with {len(all_splits)} chunks (Final stretch! ☕)...")
-        time_text.markdown(f"**⏱️ Elapsed:** {ProcessingTimer.format_time(timer.get_elapsed_time())} | **🔄 Generating embeddings...**")
-        progress_bar.progress(0.7)
+        status_text.markdown(f"### 🔍 Connecting vector database ({len(all_splits)} chunks)...")
+        time_text.markdown(f"**⏱️ Elapsed:** {ProcessingTimer.format_time(timer.get_elapsed_time())} | **🔄 Syncing embeddings & BM25 index...**")
+        progress_bar.progress(0.75)
         
         st.session_state.retriever = build_vector_store(all_splits)
         timer.complete_item()
@@ -211,12 +232,13 @@ def process_uploaded_files(uploaded_files):
         st.session_state.uploaded_files_names = file_names
         st.session_state.using_sample_data = False
         st.session_state.document_splits = all_splits
-        st.session_state.document_splits = all_splits
         st.session_state.vector_count = len(all_splits)
         
-        # Generate suggested prompts
+        # Step 4: Generate suggested prompts
         log_info("Generating suggested prompts...")
-        status_text.markdown("### 💡 Generating suggested questions...")
+        status_text.markdown("### 💡 Formulating suggested questions...")
+        time_text.markdown(f"**⏱️ Elapsed:** {ProcessingTimer.format_time(timer.get_elapsed_time())} | **🧠 Extracting insights from financial summary...**")
+        progress_bar.progress(0.9)
         
         # Create a context summary from the first few chunks
         context_summary = " ".join([split.page_content for split in all_splits[:5]])
@@ -243,34 +265,49 @@ def process_uploaded_files(uploaded_files):
     except Exception as e:
         log_exception("Error processing uploaded documents", e)
         st.error(f"❌ Error processing documents: {str(e)}")
+    finally:
+        st.session_state.is_processing = False
 
 
 def process_sample_data(data_dir: str, force_reload: bool = False):
-    """Process sample data from directory with parallel processing and smart caching"""
+    """Process sample data from directory with live file-by-file updates and click lock"""
+    if st.session_state.get("is_processing", False):
+        st.warning("⚠️ Processing is already in progress. Please wait for it to complete.")
+        return
+
+    st.session_state.is_processing = True
     try:
         log_info(f"Starting to process sample data from: {data_dir} (force_reload={force_reload})")
         
         # Create progress bar and timer
-        progress_bar = st.progress(0)
+        progress_bar = st.progress(0.0)
         status_text = st.empty()
         time_text = st.empty()
-        timer = ProcessingTimer(2)  # 2 main steps: PDF processing + vector store
+        timer = ProcessingTimer(5)
         
-        # Step 1: Load and split PDFs using PARALLEL processing
+        # Step 1: Load and split PDFs using PARALLEL processing with live file updates
         timer.start_item()
-        status_text.markdown("### ⚙️ Processing Documents (Grab a cup of coffee, this will take some time 🍵)...")
-        time_text.markdown(f"**⏱️ Elapsed:** 0s | **🔄 Loading PDFs in parallel with 4 workers...**")
-        progress_bar.progress(0.1)
+        status_text.markdown("### ⚙️ Processing Documents (Parsing annual reports in parallel)...")
+        time_text.markdown("**⏱️ Elapsed:** 0s | **🔄 Initializing 4 workers across documents...**")
+        progress_bar.progress(0.05)
+        
+        def on_sample_pdf_progress(completed_count, total_count, file_name, chunks_count):
+            elapsed = ProcessingTimer.format_time(timer.get_elapsed_time())
+            pct = 0.05 + 0.50 * (completed_count / max(1, total_count))
+            progress_bar.progress(min(0.55, pct))
+            status_text.markdown(f"### ⚙️ Parsing Documents ({completed_count}/{total_count} files finished)...")
+            time_text.markdown(f"**⏱️ Elapsed:** {elapsed} | **📄 Processed:** `{file_name}` ({chunks_count} chunks)")
         
         log_info("Loading PDFs with parallel processing (4 workers)")
         pdf_splits_dict = load_full_pdf_splits(
             data_dir,
             use_parallel=True,
-            max_workers=4
+            max_workers=4,
+            progress_callback=on_sample_pdf_progress
         )
         
         timer.complete_item()
-        progress_bar.progress(0.5)
+        progress_bar.progress(0.55)
         
         if not pdf_splits_dict:
             log_error("No PDF files could be processed")
@@ -299,9 +336,9 @@ def process_sample_data(data_dir: str, force_reload: bool = False):
         
         # Step 2: Build vector store (with smart caching)
         timer.start_item()
-        status_text.markdown(f"### 🔍 Building vector database with {len(all_splits)} chunks (Almost there! ☕)...")
-        time_text.markdown(f"**⏱️ Elapsed:** {ProcessingTimer.format_time(timer.get_elapsed_time())} | **🔄 Checking cache...**")
-        progress_bar.progress(0.6)
+        status_text.markdown(f"### 🔍 Connecting vector database with {len(all_splits)} chunks...")
+        time_text.markdown(f"**⏱️ Elapsed:** {ProcessingTimer.format_time(timer.get_elapsed_time())} | **🔄 Syncing ChromaDB & BM25 index...**")
+        progress_bar.progress(0.70)
         
         log_info(f"Building vector store (force_reload={force_reload})...")
         st.session_state.retriever = build_vector_store(all_splits, force_reload=force_reload)
@@ -310,12 +347,13 @@ def process_sample_data(data_dir: str, force_reload: bool = False):
         st.session_state.uploaded_files_names = list(pdf_splits_dict.keys())
         st.session_state.using_sample_data = True
         st.session_state.document_splits = all_splits
-        st.session_state.document_splits = all_splits
         st.session_state.vector_count = len(all_splits)
         
-        # Generate suggested prompts
+        # Step 3: Generate suggested prompts
         log_info("Generating suggested prompts...")
-        status_text.markdown("### 💡 Generating suggested questions...")
+        status_text.markdown("### 💡 Formulating suggested questions...")
+        time_text.markdown(f"**⏱️ Elapsed:** {ProcessingTimer.format_time(timer.get_elapsed_time())} | **🧠 Extracting insights from financial summary...**")
+        progress_bar.progress(0.88)
         
         # Create a context summary from the first few chunks
         context_summary = " ".join([split.page_content for split in all_splits[:5]])
@@ -337,6 +375,8 @@ def process_sample_data(data_dir: str, force_reload: bool = False):
     except Exception as e:
         log_exception("Error loading sample data", e)
         st.error(f"❌ Error loading sample data: {str(e)}")
+    finally:
+        st.session_state.is_processing = False
 
 
 def render_stats():
@@ -359,13 +399,14 @@ def render_stats():
 def render_actions():
     """Render action buttons"""
     st.header("⚙️ Actions")
+    is_busy = st.session_state.get("is_processing", False)
     
-    if st.button("🗑️ Clear Documents", use_container_width=True):
+    if st.button("🗑️ Clear Documents", use_container_width=True, disabled=is_busy):
         reset_documents()
         st.success("Documents cleared!")
         st.rerun()
     
-    if st.button("🔄 Reset Chat", use_container_width=True):
+    if st.button("🔄 Reset Chat", use_container_width=True, disabled=is_busy):
         reset_conversation()
         st.success("Chat history cleared!")
         st.rerun()

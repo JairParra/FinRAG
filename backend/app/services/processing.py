@@ -50,7 +50,8 @@ def load_full_pdf_splits(data_dir: str,
                          chunk_overlap: int = 100, 
                          verbose: int = 0,
                          use_parallel: bool = True,
-                         max_workers: int = 4) -> dict:
+                         max_workers: int = 4,
+                         progress_callback=None) -> dict:
     """
     Discover all PDF files in the given directory, load and split each PDF document,
     and return a dictionary mapping each PDF file path to its list of full document splits.
@@ -62,6 +63,7 @@ def load_full_pdf_splits(data_dir: str,
       - chunk_overlap: The number of overlapping tokens between chunks (default: 100).
       - use_parallel: Whether to use parallel processing (default: True).
       - max_workers: Maximum number of parallel workers (default: 4).
+      - progress_callback: Optional callable(completed_count, total_count, file_name, chunks_count)
       
     Returns:
       - Dictionary with keys as PDF file paths and values as lists of document chunks.
@@ -73,8 +75,9 @@ def load_full_pdf_splits(data_dir: str,
         return {}
     
     splits_dict = {}
+    total_files = len(pdf_files)
     
-    if use_parallel and len(pdf_files) > 1:
+    if use_parallel and total_files > 1:
         # Parallel processing
         def process_single_pdf(file):
             pdf_path = os.path.join(data_dir, file)
@@ -87,22 +90,34 @@ def load_full_pdf_splits(data_dir: str,
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             futures = {executor.submit(process_single_pdf, file): file for file in pdf_files}
             
-            # Process without tqdm to avoid Streamlit conflicts
+            completed_count = 0
             for future in as_completed(futures):
                 file, splits, error = future.result()
+                completed_count += 1
                 if error:
                     print(f"Error processing {file}: {error}")
                 else:
                     splits_dict[file] = splits
+                if progress_callback:
+                    try:
+                        progress_callback(completed_count, total_files, file, len(splits) if splits else 0)
+                    except Exception as cb_err:
+                        print(f"Error in progress_callback: {cb_err}")
     else:
         # Sequential processing
-        for file in pdf_files:
+        for i, file in enumerate(pdf_files, 1):
             pdf_path = os.path.join(data_dir, file)
+            splits = None
             try:
                 splits = load_and_split_pdf(pdf_path, chunk_size, chunk_overlap)
                 splits_dict[file] = splits
             except Exception as e:
                 print(f"Error processing {pdf_path}: {e}")
+            if progress_callback:
+                try:
+                    progress_callback(i, total_files, file, len(splits) if splits else 0)
+                except Exception as cb_err:
+                    print(f"Error in progress_callback: {cb_err}")
                 
     return splits_dict
 

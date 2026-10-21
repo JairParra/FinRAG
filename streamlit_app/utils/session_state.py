@@ -43,6 +43,10 @@ def initialize_session_state():
     if "suggested_prompts" not in st.session_state:
         st.session_state.suggested_prompts = []
 
+    # Processing lock to prevent concurrent runs
+    if "is_processing" not in st.session_state:
+        st.session_state.is_processing = False
+
 
 def reset_conversation():
     """Reset the conversation history"""
@@ -59,4 +63,5 @@ def reset_documents():
     st.session_state.vector_count = 0
     st.session_state.document_splits = []
     st.session_state.suggested_prompts = []
+    st.session_state.is_processing = False
     reset_conversation()
