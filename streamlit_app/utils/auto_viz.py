@@ -50,12 +50,30 @@ Your task:
    - Scale & Unit Segregation: Do NOT combine metrics with vastly different units (e.g., INR millions vs USD millions) in the same dataset. If a table reports both INR and USD, create separate datasets for each currency (e.g., "INR Financial Results" and "USD Financial Results").
    - Growth & Variance: If a table contains base period quantities (e.g., 2021, 2022) and growth rates (e.g., Change %), extract both, but also create a dedicated "Growth Rates" dataset so percentages can be compared directly without being dwarfed by large base amounts.
    - Multi-dimensional data: If data has a category dimension (e.g. "Currency or basis": INR, USD, Constant currency), include it as a column alongside "Metric" and "Growth (%)".
-5. Determine the best chart type for each dataset ("bar", "grouped_bar", "line", "waterfall")
+5. INTELLIGENT CHART SELECTION RULES:
+   - "scorecard": Use when reporting 1 key metric across 1 or 2 periods (e.g. 2022 vs 2023 revenue share, EBITDA margin change), or a single scalar KPI (e.g. 72% Americas revenue concentration), or a single row of 1-4 summary metrics.
+   - "donut": Use when the data represents parts of a whole summing to ~100% (e.g. regional revenue breakdown, portfolio mix, customer concentration shares).
+   - "horizontal_bar": Use for rankings, comparing scopes/entities (e.g. Group vs Company), or categories with long descriptive names.
+   - "grouped_bar": Use for comparing multiple metrics or entities across 2 or more categories.
+   - "line": STRICTLY ONLY when there are 3 or more consecutive time periods (e.g., 2021, 2022, 2023). NEVER suggest a line chart for 1 or 2 periods.
+   - "growth_divergence": When contrasting top-line growth (e.g. Revenue) against bottom-line growth (e.g. EBITDA).
+   - "waterfall": For variance walks, P&L bridges, or cost bridges.
 6. Return structured JSON in this EXACT format:
 
 {{
   "has_data": true,
   "datasets": [
+    {{
+      "name": "Americas Revenue Share",
+      "description": "Americas geographic share of Group revenue between 2022 and 2023",
+      "data_type": "comparison",
+      "columns": ["Metric", "2022", "2023", "Change (pp)"],
+      "rows": [
+        {{"Metric": "Americas share of Group revenue (%)", "2022": 72.4, "2023": 71.65, "Change (pp)": -0.75}}
+      ],
+      "suggested_chart": "scorecard",
+      "chart_rationale": "Single metric 2-period comparison with change is best presented as an executive KPI scorecard"
+    }},
     {{
       "name": "Revenue and Adjusted EBITDA (INR)",
       "description": "Reported revenue and EBITDA for 2021-2022 in INR million",
@@ -77,7 +95,7 @@ Your task:
         {{"Metric": "Revenue", "Growth (%)": 28.2}},
         {{"Metric": "Adjusted EBITDA", "Growth (%)": 7.5}}
       ],
-      "suggested_chart": "bar",
+      "suggested_chart": "growth_divergence",
       "chart_rationale": "Direct growth rate comparison showing margin divergence"
     }}
   ]
@@ -301,91 +319,163 @@ def clean_and_classify_columns(df: pd.DataFrame) -> Dict[str, Any]:
     }
 
 
-def handle_single_row_period_dataset(df: pd.DataFrame, title: str) -> Optional[Tuple[go.Figure, str]]:
+def create_financial_scorecard(
+    df: pd.DataFrame,
+    title: str,
+    dataset_desc: str = ""
+) -> Optional[Tuple[go.Figure, str]]:
     """
-    Transforms wide single-row period comparison into a clean trend chart.
-    E.g. Metric: Adjusted EBITDA Margin, 2021 (%): 19.0, 2022 (%): 15.9, Change: -3.1 pp
-    Fixes disconnected single-dot charts.
+    Renders executive KPI scorecards / bullet gauges for single-row metrics,
+    2-period comparisons (e.g. 2022 vs 2023), and single scalars.
+    Eliminates awkward 1-point or 2-point disconnected line charts.
     """
     if len(df) != 1:
         return None
         
-    cols = df.columns[1:]
-    period_cols = [c for c in cols if is_year_or_period_col(c) and not any(k in str(c).lower() for k in ['change', 'diff', 'drag', 'variance', 'points'])]
-    change_cols = [c for c in cols if any(k in str(c).lower() for k in ['change', 'diff', 'drag', 'variance', 'points'])]
-    
-    if len(period_cols) < 2:
-        return None
-        
+    cols = list(df.columns)
     metric_label = str(df.iloc[0, 0])
-    period_labels = []
-    for c in period_cols:
-        match = re.search(r'(19\d\d|20\d\d|fy\d\d|q[1-4]|h[1-2])', str(c), re.IGNORECASE)
-        period_labels.append(match.group(0).upper() if match else str(c))
     
-    y_vals = []
-    for c in period_cols:
-        val = pd.to_numeric(str(df.iloc[0][c]).replace(',', '').replace('%', ''), errors='coerce')
-        y_vals.append(val)
+    numeric_candidates = cols[1:] if len(cols) > 1 else cols
+    period_cols = [c for c in numeric_candidates if is_year_or_period_col(c) and not any(k in str(c).lower() for k in ['change', 'diff', 'drag', 'variance', 'points'])]
+    change_cols = [c for c in numeric_candidates if any(k in str(c).lower() for k in ['change', 'diff', 'drag', 'variance', 'points'])]
+    
+    # Case 1: Two periods with comparison / delta (e.g. 2022: 72.4%, 2023: 71.65%)
+    if len(period_cols) >= 2:
+        p_prior = period_cols[0]
+        p_curr = period_cols[-1]
         
-    is_pct = any(is_percentage_metric(c) for c in period_cols) or (pd.Series(y_vals).abs().max() <= 100)
-    fmt = '.1f' if is_pct else ',.1f'
-    sfx = '%' if is_pct else ''
-    
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(
-        x=period_labels,
-        y=y_vals,
-        mode='lines+markers+text',
-        name=metric_label,
-        line=dict(color='#3B82F6', width=3.5),
-        marker=dict(size=11, color='#60A5FA', line=dict(color='#FFFFFF', width=1.5)),
-        text=[f"{v:{fmt}}{sfx}" for v in y_vals],
-        textposition='top center',
-        textfont=dict(size=13, color='#F8FAFC'),
-        hovertemplate=f'<b>%{{x}}</b><br>{metric_label}: %{{y:{fmt}}}{sfx}<extra></extra>'
-    ))
-    
-    # Delta annotation if change column exists
-    if change_cols:
-        chg_val = pd.to_numeric(str(df.iloc[0][change_cols[0]]).replace(',', '').replace('%', ''), errors='coerce')
-        if pd.notna(chg_val):
-            sign = "+" if chg_val > 0 else ""
-            chg_unit = " pp" if is_pct else sfx
-            badge_color = "#10B981" if chg_val >= 0 else "#EF4444"
-            fig.add_annotation(
-                x=period_labels[-1],
-                y=y_vals[-1],
-                text=f"<b>Change: {sign}{chg_val:.1f}{chg_unit}</b>",
-                showarrow=True,
-                arrowhead=2,
-                arrowcolor=badge_color,
-                ax=40,
-                ay=-35,
-                bgcolor="rgba(15, 23, 42, 0.92)",
-                bordercolor=badge_color,
-                borderwidth=1.5,
-                borderpad=5,
-                font=dict(color="#F8FAFC", size=12)
-            )
+        curr_val = pd.to_numeric(str(df.iloc[0][p_curr]).replace(',', '').replace('%', ''), errors='coerce')
+        prior_val = pd.to_numeric(str(df.iloc[0][p_prior]).replace(',', '').replace('%', ''), errors='coerce')
+        
+        if pd.notna(curr_val) and pd.notna(prior_val):
+            is_pct = is_percentage_metric(metric_label) or any(is_percentage_metric(c) for c in [p_curr, p_prior]) or (abs(curr_val) <= 100 and abs(prior_val) <= 100)
+            sfx = "%" if is_pct else ""
+            delta_sfx = " pp" if is_pct else sfx
+            fmt = ".2f" if is_pct else ",.1f"
             
-    fig.update_layout(
-        title=dict(text=f"<b>{title}</b><br><span style='font-size:12px;color:#94A3B8'>{metric_label}</span>", x=0.02),
-        xaxis=dict(title="", tickfont=dict(size=13, color="#CBD5E1"), showgrid=False),
-        yaxis=dict(
-            title=f"Rate ({sfx})" if is_pct else "Value",
-            ticksuffix=sfx,
-            tickfont=dict(size=12, color="#94A3B8"),
-            gridcolor="rgba(255, 255, 255, 0.08)"
-        ),
-        template="plotly_dark",
-        paper_bgcolor='rgba(10,25,41,0.95)',
-        plot_bgcolor='rgba(26,51,80,0.35)',
-        font=dict(color='#E3F2FD'),
-        height=460,
-        margin=dict(t=85, b=40, l=60, r=40)
-    )
-    return fig, f"📊 Period Trend: {title}"
+            fig = go.Figure()
+            indicator_params = {
+                "mode": "number+delta+gauge" if (is_pct and 0 <= curr_val <= 100) else "number+delta",
+                "value": curr_val,
+                "number": {
+                    "suffix": sfx,
+                    "valueformat": fmt,
+                    "font": {"size": 42, "color": "#F8FAFC", "family": "Inter, Segoe UI, sans-serif"}
+                },
+                "delta": {
+                    "reference": prior_val,
+                    "valueformat": fmt,
+                    "suffix": delta_sfx,
+                    "increasing": {"color": "#10B981"},
+                    "decreasing": {"color": "#EF4444"},
+                    "font": {"size": 16}
+                },
+                "title": {
+                    "text": f"<b>{title}</b><br><span style='font-size:12px;color:#94A3B8'>{metric_label} ({p_curr}) | Prior ({p_prior}): {prior_val:{fmt}}{sfx}</span>"
+                }
+            }
+            
+            if is_pct and 0 <= curr_val <= 100:
+                indicator_params["gauge"] = {
+                    "shape": "bullet",
+                    "axis": {"range": [0, 100], "tickfont": {"color": "#94A3B8", "size": 11}},
+                    "bar": {"color": "#38BDF8"},
+                    "threshold": {
+                        "line": {"color": "#F59E0B", "width": 3.5},
+                        "thickness": 0.85,
+                        "value": prior_val
+                    },
+                    "bgcolor": "rgba(255, 255, 255, 0.05)",
+                    "bordercolor": "rgba(255, 255, 255, 0.15)"
+                }
+                
+            fig.add_trace(go.Indicator(**indicator_params))
+            fig.update_layout(
+                template="plotly_dark",
+                paper_bgcolor="rgba(10, 25, 41, 0.95)",
+                plot_bgcolor="rgba(26, 51, 80, 0.35)",
+                height=250,
+                margin=dict(t=75, b=25, l=45, r=45)
+            )
+            return fig, f"Scorecard: {title}"
+
+    # Extract valid numeric columns for single scalar or multi-card strip
+    num_cols = []
+    for c in numeric_candidates:
+        val = pd.to_numeric(str(df.iloc[0][c]).replace(',', '').replace('%', ''), errors='coerce')
+        if pd.notna(val):
+            num_cols.append((c, val))
+            
+    # Case 2: Single scalar metric (e.g. 1 value or 1 period)
+    if len(num_cols) == 1:
+        c_name, val = num_cols[0]
+        label = metric_label if metric_label and metric_label != str(df.iloc[0, 0]) else c_name
+        is_pct = is_percentage_metric(label) or is_percentage_metric(c_name) or (0 <= val <= 100 and '%' in str(df.iloc[0][c_name]))
+        sfx = "%" if is_pct else ""
+        fmt = ".2f" if (is_pct and val < 10) else (".1f" if is_pct else ",.1f")
+        
+        fig = go.Figure()
+        indicator_params = {
+            "mode": "number+gauge" if (is_pct and 0 <= val <= 100) else "number",
+            "value": val,
+            "number": {
+                "suffix": sfx,
+                "valueformat": fmt,
+                "font": {"size": 44, "color": "#F8FAFC", "family": "Inter, Segoe UI, sans-serif"}
+            },
+            "title": {
+                "text": f"<b>{title}</b><br><span style='font-size:12px;color:#94A3B8'>{metric_label} ({c_name})</span>"
+            }
+        }
+        if is_pct and 0 <= val <= 100:
+            indicator_params["gauge"] = {
+                "shape": "bullet",
+                "axis": {"range": [0, 100], "tickfont": {"color": "#94A3B8", "size": 11}},
+                "bar": {"color": "#38BDF8"},
+                "bgcolor": "rgba(255, 255, 255, 0.05)",
+                "bordercolor": "rgba(255, 255, 255, 0.15)"
+            }
+        fig.add_trace(go.Indicator(**indicator_params))
+        fig.update_layout(
+            template="plotly_dark",
+            paper_bgcolor="rgba(10, 25, 41, 0.95)",
+            plot_bgcolor="rgba(26, 51, 80, 0.35)",
+            height=230,
+            margin=dict(t=70, b=25, l=45, r=45)
+        )
+        return fig, f"Scorecard: {title}"
+
+    # Case 3: 2 to 4 key metrics in 1 row (Multi-metric dashboard strip)
+    if 2 <= len(num_cols) <= 4:
+        fig = go.Figure()
+        n = len(num_cols)
+        for i, (c_name, val) in enumerate(num_cols):
+            is_pct = is_percentage_metric(c_name) or (0 <= val <= 100 and '%' in str(df.iloc[0][c_name]))
+            sfx = "%" if is_pct else ""
+            fmt = ".1f" if is_pct else ",.1f"
+            fig.add_trace(go.Indicator(
+                mode="number",
+                value=val,
+                number={"suffix": sfx, "valueformat": fmt, "font": {"size": 32, "color": "#F8FAFC"}},
+                title={"text": f"<span style='font-size:12px;color:#94A3B8'>{c_name}</span>"},
+                domain={'row': 0, 'column': i}
+            ))
+        fig.update_layout(
+            grid={'rows': 1, 'columns': n, 'pattern': 'independent'},
+            title=dict(text=f"<b>{title}</b>", x=0.02),
+            template="plotly_dark",
+            paper_bgcolor="rgba(10, 25, 41, 0.95)",
+            height=220,
+            margin=dict(t=65, b=20, l=30, r=30)
+        )
+        return fig, f"Scorecard Strip: {title}"
+
+    return None
+
+
+def handle_single_row_period_dataset(df: pd.DataFrame, title: str) -> Optional[Tuple[go.Figure, str]]:
+    """Backward compatibility wrapper delegating to create_financial_scorecard."""
+    return create_financial_scorecard(df, title)
 
 
 
@@ -539,6 +629,107 @@ def create_waterfall_chart(df: pd.DataFrame, title: str, x_col: str, y_col: str)
     return fig
 
 
+def create_donut_chart(df: pd.DataFrame, title: str, x_col: str, y_col: str) -> go.Figure:
+    """
+    Renders an executive donut chart for share-of-whole, concentration, and mix distributions.
+    Displays center callout with the dominant slice.
+    """
+    fig = go.Figure()
+    fig.add_trace(go.Pie(
+        labels=df[x_col].astype(str),
+        values=df[y_col],
+        hole=0.62,
+        marker=dict(colors=CHART_COLORS, line=dict(color='#0A1929', width=2)),
+        textinfo='label+percent',
+        hoverinfo='label+value+percent',
+        hovertemplate='<b>%{label}</b><br>Value: %{value:,.1f}%<br>Share: %{percent}<extra></extra>',
+        textfont=dict(size=12, color='#F8FAFC')
+    ))
+    
+    # Center callout for dominant category
+    try:
+        top_idx = df[y_col].idxmax()
+        top_label = str(df.loc[top_idx, x_col])
+        top_val = df.loc[top_idx, y_col]
+        center_text = f"<b>{top_val:.1f}%</b><br><span style='font-size:11px;color:#94A3B8'>{top_label[:14]}</span>"
+    except Exception:
+        center_text = f"<b>100%</b><br><span style='font-size:11px;color:#94A3B8'>Total</span>"
+
+    fig.update_layout(
+        title=dict(text=f"<b>{title}</b><br><span style='font-size:12px;color:#94A3B8'>Distribution & Mix</span>", x=0.02),
+        annotations=[
+            dict(
+                text=center_text,
+                x=0.5, y=0.5,
+                font=dict(size=18, color="#F8FAFC"),
+                showarrow=False
+            )
+        ],
+        template="plotly_dark",
+        paper_bgcolor='rgba(10,25,41,0.95)',
+        font=dict(color='#E3F2FD'),
+        legend=dict(orientation="h", yanchor="bottom", y=-0.15, xanchor="center", x=0.5),
+        height=450,
+        margin=dict(t=75, b=50, l=40, r=40)
+    )
+    return fig
+
+
+def create_horizontal_bar_chart(
+    df: pd.DataFrame,
+    title: str,
+    x_col: str,
+    y_cols: List[str],
+    is_pct: bool = False
+) -> go.Figure:
+    """
+    Renders clean horizontal bars for rankings, entity benchmarking, or categories with long names.
+    Prevents tilted, overlapping, or truncated category labels.
+    """
+    fig = go.Figure()
+    fmt = '.1f' if is_pct else ',.1f'
+    sfx = '%' if is_pct else ''
+    
+    for idx, col in enumerate(y_cols):
+        vals = df[col].tolist()
+        text_vals = [f"{v:{fmt}}{sfx}" if pd.notna(v) else "" for v in vals]
+        fig.add_trace(go.Bar(
+            y=df[x_col].astype(str),
+            x=df[col],
+            name=str(col),
+            orientation='h',
+            marker=dict(color=CHART_COLORS[idx % len(CHART_COLORS)], line=dict(color='rgba(255,255,255,0.15)', width=1)),
+            text=text_vals,
+            textposition='outside',
+            textfont=dict(size=12, color='#F8FAFC'),
+            hovertemplate=f'<b>%{{y}}</b><br>{col}: %{{x:{fmt}}}{sfx}<extra></extra>'
+        ))
+        
+    fig.update_layout(
+        title=dict(text=f"<b>{title}</b>", x=0.02),
+        xaxis=dict(
+            title="Rate (%)" if is_pct else "Value",
+            ticksuffix=sfx,
+            tickfont=dict(size=12, color="#94A3B8"),
+            gridcolor='rgba(255,255,255,0.08)'
+        ),
+        yaxis=dict(
+            title="",
+            tickfont=dict(size=12, color="#CBD5E1"),
+            autorange="reversed"
+        ),
+        barmode='group' if len(y_cols) > 1 else 'relative',
+        template="plotly_dark",
+        paper_bgcolor='rgba(10,25,41,0.95)',
+        plot_bgcolor='rgba(26,51,80,0.35)',
+        font=dict(color='#E3F2FD'),
+        showlegend=True if len(y_cols) > 1 else False,
+        height=max(360, len(df) * 45 + 160),
+        margin=dict(t=70, b=40, l=140, r=40)
+    )
+    return fig
+
+
 def create_chart_from_dataframe(
     df: pd.DataFrame,
     chart_type: str,
@@ -550,25 +741,22 @@ def create_chart_from_dataframe(
         if df is None or len(df) == 0 or len(df.columns) < 2:
             return None
 
-        # 1. Check for single-row period comparison
-        single_res = handle_single_row_period_dataset(df, title)
-        if single_res is not None:
-            return single_res[0]
+        chart_type = chart_type.lower().strip()
 
-        # 2. Suppress single scalar numbers
-        if len(df) == 1:
-            log_debug(f"Decision Gating: Suppressed chart for single scalar point in '{title}'")
-            return None
+        # 1. Single row dataset: Scorecard / KPI Indicator
+        if len(df) == 1 or chart_type in ['scorecard', 'indicator', 'kpi']:
+            single_res = create_financial_scorecard(df, title)
+            if single_res is not None:
+                return single_res[0]
 
-        # 3. Classify columns
+        # 2. Classify columns
         cols_info = clean_and_classify_columns(df)
         x_col = cols_info['x_col']
         dimension_cols = cols_info['dimension_cols']
         quantity_cols = cols_info['quantity_cols']
         pct_cols = cols_info['pct_cols']
 
-        # 4. Handle Categorical Dimension grouping (e.g. Metric + Currency or basis + Growth (%))
-        # Fixes NaN bars caused by coercing string categories to numeric
+        # 3. Handle Categorical Dimension grouping (e.g. Metric + Reporting Scope / Currency)
         if dimension_cols and (quantity_cols or pct_cols):
             dim_col = dimension_cols[0]
             val_col = (pct_cols + quantity_cols)[0]
@@ -626,23 +814,42 @@ def create_chart_from_dataframe(
             )
             return fig
 
-        # 5. Clean remaining numeric columns
+        # 4. Clean remaining numeric columns
         for col in quantity_cols + pct_cols:
             df[col] = pd.to_numeric(df[col].astype(str).str.replace(',', '').str.replace('%', ''), errors='coerce')
 
-        # 6. Check for Growth Divergence (2-3 rows, only percentage columns)
-        if len(df) in [2, 3] and pct_cols and not quantity_cols:
+        # 5. Check for Donut / Pie chart
+        is_composition_data = False
+        if pct_cols and len(pct_cols) == 1 and not quantity_cols and len(df) >= 2:
+            sum_val = df[pct_cols[0]].sum()
+            if 80.0 <= sum_val <= 120.0 or any(k in title.lower() for k in ['share', 'mix', 'breakdown', 'concentration', 'distribution', 'split']):
+                is_composition_data = True
+
+        if chart_type in ['donut', 'pie'] or (is_composition_data and chart_type not in ['grouped_bar', 'horizontal_bar']):
+            val_col = pct_cols[0] if pct_cols else (quantity_cols[0] if quantity_cols else None)
+            if val_col:
+                return create_donut_chart(df, title, x_col, val_col)
+
+        # 6. Check for Horizontal Bar (explicit or long labels)
+        has_long_labels = any(len(str(lbl)) > 15 for lbl in df[x_col])
+        if chart_type in ['horizontal_bar', 'hbar', 'ranking'] or (has_long_labels and chart_type not in ['line', 'donut']):
+            target_cols = pct_cols if pct_cols and not quantity_cols else quantity_cols
+            if target_cols:
+                is_pct_h = len(pct_cols) > 0 and len(quantity_cols) == 0
+                return create_horizontal_bar_chart(df, title, x_col, target_cols, is_pct=is_pct_h)
+
+        # 7. Check for Growth Divergence (2-3 rows, only percentage columns)
+        if len(df) in [2, 3] and pct_cols and not quantity_cols and not is_composition_data:
             y_col_primary = pct_cols[0]
             return create_growth_divergence_chart(df, title, x_col, y_col_primary)
 
-        # 7. Check for Waterfall Bridge
+        # 8. Check for Waterfall Bridge
         if chart_type in ['waterfall', 'bridge'] or any(w in title.lower() for w in ['bridge', 'waterfall', 'walk']):
             y_col_target = (quantity_cols + pct_cols)[0] if (quantity_cols + pct_cols) else None
             if y_col_target:
                 return create_waterfall_chart(df, title, x_col, y_col_target)
 
-        # 8. Scale segregation: if quantity_cols and pct_cols coexist
-        # Do NOT plot pct_cols as flat 0 bars alongside massive quantities!
+        # 9. Scale segregation: if quantity_cols and pct_cols coexist
         if quantity_cols and pct_cols:
             active_y_cols = quantity_cols
             pct_col_for_badge = pct_cols[0]
@@ -654,6 +861,11 @@ def create_chart_from_dataframe(
             pct_col_for_badge = None
         else:
             return None
+
+        # 10. Guarding Line Charts: Strict >= 3 periods requirement
+        if chart_type == 'line' and len(df) < 3 and len(active_y_cols) < 3:
+            log_info(f"Guarding rule: Converting sparse line chart (<3 points) to grouped_bar for '{title}'")
+            chart_type = 'grouped_bar'
 
         is_overall_pct = (len(quantity_cols) == 0 and len(pct_cols) > 0)
         fig = go.Figure()
@@ -796,27 +1008,23 @@ def create_chart_from_dataset(dataset: Dict[str, Any]) -> Optional[Tuple[go.Figu
             return None
 
         title = dataset.get('name', 'Financial Data')
-        chart_type = dataset.get('suggested_chart', 'bar')
+        chart_type = dataset.get('suggested_chart', 'bar').lower().strip()
 
-        # 1. Check for single-row period comparison (e.g. EBITDA Margin 2021 vs 2022)
-        single_row_res = handle_single_row_period_dataset(df, title)
-        if single_row_res is not None:
-            return single_row_res
+        # 1. Check for single-row dataset: ALWAYS route to Financial Scorecard / KPI Indicator
+        # This handles single scalars (e.g. 72% Americas concentration) and 2-period comparisons (2022 vs 2023)
+        if len(df) == 1 or chart_type in ['scorecard', 'indicator', 'kpi']:
+            scorecard_res = create_financial_scorecard(df, title, dataset.get('description', ''))
+            if scorecard_res is not None:
+                return scorecard_res
 
-        # 2. Suppress single scalar number (e.g. 1 row, 1 numeric col)
-        if len(df) == 1:
-            log_debug(f"Decision Gating: Suppressed chart for single scalar point in '{title}'")
-            return None
-
-        # 3. Classify columns
+        # 2. Classify columns
         cols_info = clean_and_classify_columns(df)
         x_col = cols_info['x_col']
         dimension_cols = cols_info['dimension_cols']
         quantity_cols = cols_info['quantity_cols']
         pct_cols = cols_info['pct_cols']
 
-        # 4. Handle Categorical Dimension grouping (e.g. Metric + Currency or basis + Growth (%))
-        # This fixes Issue 2 (NaN bars from coercing string category columns to numeric)
+        # 3. Handle Categorical Dimension grouping (e.g. Metric + Reporting Scope / Currency)
         if dimension_cols and (quantity_cols or pct_cols):
             dim_col = dimension_cols[0]
             val_col = (pct_cols + quantity_cols)[0]
@@ -874,27 +1082,46 @@ def create_chart_from_dataset(dataset: Dict[str, Any]) -> Optional[Tuple[go.Figu
             )
             return fig, f"📊 {dataset.get('description', title)}"
 
-        # 5. Clean remaining numeric columns
+        # 4. Clean remaining numeric columns
         for col in quantity_cols + pct_cols:
             df[col] = pd.to_numeric(df[col].astype(str).str.replace(',', '').str.replace('%', ''), errors='coerce')
 
-        # 6. Check for Growth Divergence (2-3 rows, only percentage columns)
-        if len(df) in [2, 3] and pct_cols and not quantity_cols:
+        # 5. Check for Donut / Pie chart (composition / shares summing ~100%)
+        is_composition_data = False
+        if pct_cols and len(pct_cols) == 1 and not quantity_cols and len(df) >= 2:
+            sum_val = df[pct_cols[0]].sum()
+            if 80.0 <= sum_val <= 120.0 or any(k in title.lower() for k in ['share', 'mix', 'breakdown', 'concentration', 'distribution', 'split']):
+                is_composition_data = True
+
+        if chart_type in ['donut', 'pie'] or (is_composition_data and chart_type not in ['grouped_bar', 'horizontal_bar']):
+            val_col = pct_cols[0] if pct_cols else (quantity_cols[0] if quantity_cols else None)
+            if val_col:
+                fig = create_donut_chart(df, title, x_col, val_col)
+                return (fig, f"📊 Composition: {dataset.get('description', title)}")
+
+        # 6. Check for Horizontal Bar (explicit or categories with long names)
+        has_long_labels = any(len(str(lbl)) > 15 for lbl in df[x_col])
+        if chart_type in ['horizontal_bar', 'hbar', 'ranking'] or (has_long_labels and chart_type not in ['line', 'donut']):
+            target_cols = pct_cols if pct_cols and not quantity_cols else quantity_cols
+            if target_cols:
+                is_pct_h = len(pct_cols) > 0 and len(quantity_cols) == 0
+                fig = create_horizontal_bar_chart(df, title, x_col, target_cols, is_pct=is_pct_h)
+                return (fig, f"📊 Comparison: {dataset.get('description', title)}")
+
+        # 7. Check for Growth Divergence (2-3 rows, only percentage columns)
+        if len(df) in [2, 3] and pct_cols and not quantity_cols and not is_composition_data:
             y_col_primary = pct_cols[0]
             fig = create_growth_divergence_chart(df, title, x_col, y_col_primary)
             return (fig, f"📊 Growth Divergence: {title}")
 
-        # 7. Check for Waterfall Bridge
+        # 8. Check for Waterfall Bridge
         if chart_type in ['waterfall', 'bridge'] or any(w in title.lower() for w in ['bridge', 'waterfall', 'walk']):
             y_col_target = (quantity_cols + pct_cols)[0] if (quantity_cols + pct_cols) else None
             if y_col_target:
                 fig = create_waterfall_chart(df, title, x_col, y_col_target)
                 return (fig, f"📊 Variance Walk: {title}")
 
-        # 8. Scale segregation: if quantity_cols and pct_cols coexist
-        # (e.g. 2021: 71k, 2022: 91k, Change (%): 28.2%)
-        # NEVER plot pct_cols as a bar on the quantity axis!
-        # Plot quantity_cols as bars, and badge pct_cols onto the latest period bar!
+        # 9. Scale segregation: if quantity_cols and pct_cols coexist
         if quantity_cols and pct_cols:
             active_y_cols = quantity_cols
             pct_col_for_badge = pct_cols[0]
@@ -906,6 +1133,11 @@ def create_chart_from_dataset(dataset: Dict[str, Any]) -> Optional[Tuple[go.Figu
             pct_col_for_badge = None
         else:
             return None
+
+        # 10. Guarding Line Charts: Strict >= 3 periods requirement
+        if chart_type == 'line' and len(df) < 3 and len(active_y_cols) < 3:
+            log_info(f"Guarding rule: Converting sparse line chart (<3 points) to grouped_bar for '{title}'")
+            chart_type = 'grouped_bar'
 
         fig = go.Figure()
         is_overall_pct = (len(quantity_cols) == 0 and len(pct_cols) > 0)
